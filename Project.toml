@@ -1,0 +1,13 @@
+name = "TransformerCircuits"
+uuid = "ba87e8ab-4a4a-4134-8279-7ea8e8bf92e8"
+authors = ["Dominique Luna <dluna132@gmail.com> and contributors"]
+version = "0.1.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+julia = "1"
+
+[targets]
+test = ["Test"]
