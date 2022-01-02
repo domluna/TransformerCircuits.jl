@@ -1,9 +1,3 @@
-using Flux
-
-include("encoding.jl")
-include("embedding.jl")
-include("attention.jl")
-
 # size of (sequence_length, batch_size) or (1, sequence_length, batch_size)
 # embeds to (dembed, sequence_length, batch_size) or (dembed, sequence_length * batch_size)
 
@@ -88,17 +82,31 @@ end
 struct GPT
     position_embedding::Any
     token_embedding::Any
-
     encoder::Any
-    decoder::Any
 
     drop::Dropout
 end
 Flux.@functor GPT
 
+function GPT(;
+    nblocks = 1,
+    nheads = 12,
+    dembed = 784,
+    dff = dembed * 4,
+    dff_activation = gelu,
+    dropout_prob::Float32 = 0.1
+)
+    GPT(
+        Embedding(dembed, dembed),
+        Embedding(dembed, dembed),
+        Encoder(; nblocks, nheads, dembed, dff, dff_activation, dropout_prob),
+        Dropout(dropout_prob),
+    )
+end
+
 function (gpt::GPT)(inp)
     x = gpt.embedding(inp)
     x = gpt.drop(x)
     x = gpt.encoder(x)
-    gpt.decoder(x)
+    x
 end
