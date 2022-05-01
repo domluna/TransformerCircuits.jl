@@ -1,6 +1,6 @@
-function sinusoidal_encoding(sequence_len::Int, dembed::Int)
-    pe = zeros(Float32, dembed, sequence_len)
-    r = LinRange{Float32}(0, sequence_len, sequence_len)
+function sinusoidal_encoding(seqlen::Int, dembed::Int)
+    pe = zeros(Float32, dembed, seqlen)
+    r = LinRange{Float32}(0, seqlen, seqlen)
 
     @inbounds for i = 1:2:dembed
         v = r ./ (10000 .^ ((i - 1) / dembed))

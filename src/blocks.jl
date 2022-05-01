@@ -1,112 +1,91 @@
-# size of (sequence_length, batch_size) or (1, sequence_length, batch_size)
-# embeds to (dembed, sequence_length, batch_size) or (dembed, sequence_length * batch_size)
-
 struct FFN
     d1::Dense
     d2::Dense
-    drop1::Dropout
-    drop2::Dropout
+    drop::Dropout
 end
 Flux.@functor FFN
 
 FFN(dembed::Int, dff::Int, dropout_prob::Float32, dff_activation) = FFN(
-    Dense(dembed, dff, dff_activation),
-    Dropout(dropout_prob),
-    Dense(dff, dembed),
+    Dense(dembed, dff, dff_activation, bias=false),
+    Dense(dff, dembed, bias=false),
     Dropout(dropout_prob),
 )
 
-function (ffn::FFN)(inp)
-    sz = size(inp)
-    x = ffn.d1(reshape(inp, sz[1], :))
-    x = fnn.drop1(x)
+function (ffn::FFN)(x::AbstractArray{T}) where {T}
+    x = ffn.d1(x)
     x = ffn.d2(x)
-    x = fnn.drop2(x)
-    reshape(x, sz)
+    ffn.drop(x)
 end
 
-struct EncoderBlock{A,F}
+struct Block{A<:AbstractAttention,F}
     attn::A
     ffn::F
     drop::Dropout
     ln1::LayerNorm
     ln2::LayerNorm
 end
-Flux.@functor EncoderBlock
+Flux.@functor Block
 
-function EncoderBlock(nheads::Int, dembed::Int, dff::Int, dff_activation::Function, dropout_prob::Float32)
-    EncoderBlock(
+function Block(nheads::Int, dembed::Int, dff::Int, dff_activation::Function, dropout_prob::Float32)
+    Block(
         SelfAttention(dembed, nheads),
         FFN(dembed, dff, dropout_prob, dff_activation),
         Dropout(dropout_prob),
     )
 end
+Block(dembed::Int, nheads::Int) = Block(dembed, dembed, nheads)
 
-EncoderBlock(dembed::Int, nheads::Int) = EncoderBlock(dembed, dembed, nheads)
-
-function EncoderBlock(attn::MultiHeadAttention, ffn::FFN, drop::Dropout)
+function Block(attn::SelfAttention, ffn::FFN, drop::Dropout)
     ln1 = LayerNorm(size(attn.O, 1))
     ln2 = LayerNorm(size(ffn.d2.W, 1))
-    EncoderBlock(attn, ffn, drop, ln1, ln2)
+    Block(attn, ffn, drop, ln1, ln2)
 end
 
-function (b::EncoderBlock)(inp)
-    x = b.attn(b.ln1(inp))
-    x = b.drop(x) + inp
-    b.ffn(b.ln2(x)) + x
+function (b::Block)(x::AbstractArray{T}) where {T}
+    x = x + b.attn(b.ln1(x))
+    x = x + b.drop(x)
+    return x + b.ffn(b.ln2(x))
 end
-
-struct Encoder
-    blocks::Chain
-    ln::LayerNorm
-end
-Flux.@functor Encoder
-
-function Encoder(;
-    nblocks = 1,
-    nheads = 12,
-    dembed = 784,
-    dff = dembed * 4,
-    dff_activation = gelu,
-    dropout_prob::Float32 = 0.1
-)
-    blocks = Chain([
-        EncoderBlock(nheads, dembed, dff, dropout_prob, dff_activation)
-        for _ = 1:nblocks
-    ]...)
-    ln = LayerNorm(dembed)
-    Encoder(blocks, ln)
-end
-
 
 struct GPT
-    position_embedding::Any
-    token_embedding::Any
-    encoder::Any
+    position_embedding::Flux.Embedding
+    token_embedding::Flux.Embedding
 
     drop::Dropout
+    encoder::Chain
+
+    ln::LayerNorm
+    decoder::Dense
+
 end
 Flux.@functor GPT
 
-function GPT(;
+function GPT(
+    doutput::Int;
     nblocks = 1,
-    nheads = 12,
-    dembed = 784,
+    nheads = 4,
+    dembed = 128,
     dff = dembed * 4,
     dff_activation = gelu,
     dropout_prob::Float32 = 0.1
 )
     GPT(
-        Embedding(dembed, dembed),
-        Embedding(dembed, dembed),
-        Encoder(; nblocks, nheads, dembed, dff, dff_activation, dropout_prob),
+        Flux.Embedding(doutput, dembed),
+        Flux.Embedding(doutput, dembed),
         Dropout(dropout_prob),
+    Flux.Chain([
+        Block(nheads, dembed, dff, dropout_prob, dff_activation)
+        for _ = 1:nblocks
+    ]...),
+        LayerNorm(dembed),
+        Dense(dembed, doutput),
     )
 end
 
-function (gpt::GPT)(inp)
-    x = gpt.embedding(inp)
+function (gpt::GPT)(x::AbstractArray{T}) where {T}
+    x = gpt.embedding(x)
     x = gpt.drop(x)
     x = gpt.encoder(x)
-    x
+    x = gpt.ln(x)
+    return gpt.decoder(x)
 end
