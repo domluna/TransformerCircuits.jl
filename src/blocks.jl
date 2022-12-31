@@ -24,7 +24,7 @@ function (ffn::FFN)(x::AbstractArray{T}) where {T}
     ffn.drop(x)
 end
 
-struct Block{A<:AbstractAttention,F}
+struct Block{A,F}
     attn::A
     ffn::F
     drop::Dropout

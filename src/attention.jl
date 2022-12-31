@@ -1,6 +1,5 @@
-abstract type AbstractAttention end
-
-struct SelfAttention <: AbstractAttention
+# self attention is unidirectional so the mask is just a lower triangular matrix
+struct SelfAttention
     K::Dense
     Q::Dense
     V::Dense
@@ -8,64 +7,46 @@ struct SelfAttention <: AbstractAttention
 
     drop::Dropout
 
-    mask::Matrix
-
     dhead::Int
     nheads::Int
 end
 Flux.@functor SelfAttention (K, Q, V, O)
 
-function SelfAttention(dembed::Int, nheads::Int, dropout_prob::Float32)
-    @assert dembed % nheads != 0 "dimension of model, $dembed must be divisible by number of heads: $nheads"
+function SelfAttention(dembed::Int, nheads::Int; dropout_prob=0.0)
+    @assert dembed % nheads == 0 "dimension of model, $dembed must be divisible by number of heads: $nheads"
     dhead = dembed ÷ nheads
-    K = Dense(dembed, dembed, bias=false)
-    V = Dense(dembed, dembed, bias=false)
-    Q = Dense(dembed, dembed, bias=false)
-    O = Dense(dembed, dembed, bias=false)
+    K = Dense(dembed => dembed, bias=false)
+    V = Dense(dembed => dembed, bias=false)
+    Q = Dense(dembed => dembed, bias=false)
+    O = Dense(dembed => dembed, bias=false)
     return SelfAttention(K, Q, V, O, Dropout(dropout_prob), dhead, nheads)
 end
 
 
-# query, key, value dimensions are (dembed, seqlen, batch_size)
-function (attn::SelfAttention)(
-    query::AbstractArray{T,N},
-    key::AbstractArray{T,N},
-    value::AbstractArray{T,N},
-) where {T,N}
-    scale = T(1 / sqrt(attn.dhead))
+# query, key, value dimensions are (dembed, sequence_length, batch_size)
+function (sa::SelfAttention)(
+    query::A3{T},
+    key::A3{T},
+    value::A3{T},
+) where {T}
+    # (dembed, sequence_length, batch_size)
+    q = sa.Q(query)
+    k = sa.K(key)
+    v = sa.Q(value)
+    # this takes care of reshaping the matrices to allow for per head attention
+    # and then reshaping back to the original shape
+    #
+    # so it does
+    #
+    # (dembed ÷ nheads, nheads, sequence_length, batch_size)
+    #
+    # and then returns it back to
+    #
+    # (dembed, sequence_length, batch_size)
+    x = NeuralAttentionlib.multihead_qkv_attention(sa.nheads, q, k, v)
 
-    # (dembed, seqlen, batch_size)
-    q = attn.Q(query)
-    k = attn.K(key)
-    v = attn.Q(value)
-
-    # Now we do attention for each head
-
-    # ein"ijl,jkl->ikl"
-
-    # nested tensor contraction
-    # ein"(ijk,jkl),klm->im"(x, y, z)
-
-    # (dembed / nheads, nheads, seqlen, batch_size)
-    q = reshape(q, (attn.dhead, attn.nheads, size(q, 2), size(q, 3)))
-    q = reshape(permutedims(q, (1,3,2,4)), (size(q, 1), size(q, 2),  :))
-    k = reshape(k, (attn.dhead, attn.nheads, size(k, 2), size(k, 3)))
-    k = permutedims(k, (1,3,2,4), size(q, 1), size(q, 2), -1)
-    v = reshape(v, (attn.dhead, attn.nheads, size(v, 2), size(v, 3)))
-    v = permutedims(v, (1,3,2,4))
-    # (dembed / nheads, seqlen, nheads, batch_size)
-
-    # q * k' (dembed, seqlen) * (seqlen, dembed) 
-    # -> (dembed, dembed) * v (dmbed, seqlen)
-    # ->  O * x (dembed, seqlen)
-    # -> (dembed, seqlen)
-    x = softmax((q * k') .* scale) * v
-
-    # reshape back to (dembed) instead of (dembed ÷ nheads)
-    x = attn.O(x)
-
-    x = attn.drop(attn.O(x))
-    return reshape(x, size(query))
+    x = sa.drop(sa.O(x))
+    return x
 end
 
-(attn::SelfAttention)(inp::AbstractArray{T,N}) where {T,N} = attn(inp, inp, inp)
+(sa::SelfAttention)(inp::A3{T}) where {T} = sa(inp, inp, inp)
