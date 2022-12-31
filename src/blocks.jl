@@ -1,3 +1,10 @@
+struct Linear{F,M<:AbstractMatrix}
+    W::M
+    σ::F
+end
+
+Flux.@functor Linear
+
 struct FFN
     d1::Dense
     d2::Dense

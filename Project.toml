@@ -5,13 +5,20 @@ version = "0.1.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+CUDAKernels = "72cfdca4-0801-4ab0-bf6a-d52aa10adc57"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
+NeuralAttentionlib = "12afc1b8-fad6-47e1-9132-84abc478905f"
+OMEinsum = "ebe7aa44-baf0-506c-a96f-8464559b3922"
+Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"
 
 [compat]
 julia = "1"
 
 [extras]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
