@@ -12,11 +12,13 @@ struct FFN
 end
 Flux.@functor FFN
 
-FFN(dembed::Int, dff::Int, dropout_prob::Float32, dff_activation) = FFN(
-    Dense(dembed, dff, dff_activation, bias=false),
-    Dense(dff, dembed, bias=false),
-    Dropout(dropout_prob),
-)
+function FFN(dembed::Int, dff::Int, dropout_prob::Float32, dff_activation)
+    FFN(
+        Dense(dembed, dff, dff_activation, bias = false),
+        Dense(dff, dembed, bias = false),
+        Dropout(dropout_prob),
+    )
+end
 
 function (ffn::FFN)(x::AbstractArray{T}) where {T}
     x = ffn.d1(x)
@@ -33,7 +35,13 @@ struct Block{A,F}
 end
 Flux.@functor Block
 
-function Block(nheads::Int, dembed::Int, dff::Int, dff_activation::Function, dropout_prob::Float32)
+function Block(
+    nheads::Int,
+    dembed::Int,
+    dff::Int,
+    dff_activation::Function,
+    dropout_prob::Float32,
+)
     Block(
         SelfAttention(dembed, nheads),
         FFN(dembed, dff, dropout_prob, dff_activation),
@@ -63,7 +71,6 @@ struct GPT
 
     ln::LayerNorm
     decoder::Dense
-
 end
 Flux.@functor GPT
 
@@ -74,16 +81,17 @@ function GPT(
     dembed = 128,
     dff = dembed * 4,
     dff_activation = gelu,
-    dropout_prob::Float32 = 0.1
+    dropout_prob::Float32 = 0.1,
 )
     GPT(
         Flux.Embedding(doutput, dembed),
         Flux.Embedding(doutput, dembed),
         Dropout(dropout_prob),
-    Flux.Chain([
-        Block(nheads, dembed, dff, dropout_prob, dff_activation)
-        for _ = 1:nblocks
-    ]...),
+        Flux.Chain(
+            [
+                Block(nheads, dembed, dff, dropout_prob, dff_activation) for _ in 1:nblocks
+            ]...,
+        ),
         LayerNorm(dembed),
         Dense(dembed, doutput),
     )

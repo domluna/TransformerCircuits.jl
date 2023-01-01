@@ -4,7 +4,7 @@ using Tullio
 using NeuralAttentionlib
 using BenchmarkTools
 CUDA.allowscalar(false)
-const A3{T} = AbstractArray{T, 3}
+const A3{T} = AbstractArray{T,3}
 
 """
     MultiHeadAttention(dims, num_heads; 
@@ -36,160 +36,165 @@ mha = MultiHeadAttention(64, 8)
 ```
 """
 struct MultiHeadAttention
-  num_heads::Int
-  qkv_proj
-  attn_drop
-  out_proj
+    num_heads::Int
+    qkv_proj::Any
+    attn_drop::Any
+    out_proj::Any
 end
 
 @functor MultiHeadAttention
 
-function MultiHeadAttention(dims, num_heads::Int; 
-                     bias::Bool = false,
-                    #  init = glorot_uniform, # TODO
-                     attn_dropout_prob = 0.0, 
-                     out_proj_dropout_prob = 0.0)
-
-  dims = mha_process_dims(dims)
-  @assert dims.qkv % num_heads == 0 "qkv_dim should be divisible by num_heads"
-  qkv_proj = QKVProj((dims.q_in, dims.k_in, dims.v_in) => dims.qkv; bias)
-  attn_drop = Dropout(attn_dropout_prob)
-  out_proj = Chain(Dense(dims.qkv => dims.out; bias), Dropout(out_proj_dropout_prob))
-  return MultiHeadAttention(num_heads, qkv_proj, attn_drop, out_proj)
+function MultiHeadAttention(
+    dims,
+    num_heads::Int;
+    bias::Bool = false,
+    #  init = glorot_uniform, # TODO
+    attn_dropout_prob = 0.0,
+    out_proj_dropout_prob = 0.0,
+)
+    dims = mha_process_dims(dims)
+    @assert dims.qkv % num_heads == 0 "qkv_dim should be divisible by num_heads"
+    qkv_proj = QKVProj((dims.q_in, dims.k_in, dims.v_in) => dims.qkv; bias)
+    attn_drop = Dropout(attn_dropout_prob)
+    out_proj = Chain(Dense(dims.qkv => dims.out; bias), Dropout(out_proj_dropout_prob))
+    return MultiHeadAttention(num_heads, qkv_proj, attn_drop, out_proj)
 end
 
-mha_process_dims(dims::Int) = (; q_in = dims, k_in = dims, v_in = dims, qkv = dims, out = dims)
-mha_process_dims((in, (qkv, out))::Pair{Int, <:Pair}) = (; q_in = in, k_in = in, v_in = in, qkv, out)
-mha_process_dims((in, (qkv, out))::Pair{<:Tuple, <:Pair}) = (; q_in = in[1], k_in = in[2], v_in = in[3], qkv, out)
+function mha_process_dims(dims::Int)
+    (; q_in = dims, k_in = dims, v_in = dims, qkv = dims, out = dims)
+end
+function mha_process_dims((in, (qkv, out))::Pair{Int,<:Pair})
+    (; q_in = in, k_in = in, v_in = in, qkv, out)
+end
+function mha_process_dims((in, (qkv, out))::Pair{<:Tuple,<:Pair})
+    (; q_in = in[1], k_in = in[2], v_in = in[3], qkv, out)
+end
 
 # self-attention
 (m::MultiHeadAttention)(x; kws...) = m(x, x, x; kws...)
 
-function (m::MultiHeadAttention)(q_in::A3, k_in::A3, v_in::A3; with_weights=false, backend=:tullio)
-  ## [q_in] = [q_in_dim, q_len, batch_size]
-  ## [k_in] = [k_in_dim, kv_len, batch_size] 
-  ## [v_in] = [v_in_dim, kv_len, batch_size]
-  @info "backend" backend
+function (m::MultiHeadAttention)(
+    q_in::A3,
+    k_in::A3,
+    v_in::A3;
+    with_weights = false,
+    backend = :tullio,
+)
+    ## [q_in] = [q_in_dim, q_len, batch_size]
+    ## [k_in] = [k_in_dim, kv_len, batch_size] 
+    ## [v_in] = [v_in_dim, kv_len, batch_size]
 
-  if backend == :tullio
-    q, k, v = m.qkv_proj(q_in, k_in, v_in, m.num_heads)
-    # [q] = [qkv_dim / num_heads, num_heads, q_len, batch_size]
-    # [k] = [v] = [qkv_dim / num_heads, num_heads, kv_len, batch_size]
-    
-    x, α = dot_product_attention(q, k, v; dropout=m.attn_drop)
-    x = reshape(x, :, size(x, 3), size(x, 4))
-  elseif backend == :nnalib
-    q, k, v = m.qkv_proj(q_in, k_in, v_in)
-    @info "here" size(q) m.num_heads
-    x = NeuralAttentionlib.multihead_qkv_attention(m.num_heads, q, k, v)
-  else
-    error("Unknown attention implementation")
-  end
+    if backend == :tullio
+        q, k, v = m.qkv_proj(q_in, k_in, v_in, m.num_heads)
+        # [q] = [qkv_dim / num_heads, num_heads, q_len, batch_size]
+        # [k] = [v] = [qkv_dim / num_heads, num_heads, kv_len, batch_size]
 
-  x = m.out_proj(x)
+        x, α = dot_product_attention(q, k, v; dropout = m.attn_drop)
+        x = reshape(x, :, size(x, 3), size(x, 4))
+    elseif backend == :nnalib
+        q, k, v = m.qkv_proj(q_in, k_in, v_in)
+        x = NeuralAttentionlib.multihead_qkv_attention(m.num_heads, q, k, v)
+    else
+        error("Unknown attention implementation")
+    end
 
-  return with_weights ? (x, α) : x
+    x = m.out_proj(x)
+
+    return with_weights ? (x, α) : x
 end
 
 # Inspired by https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.dot_product_attention.html?highlight=dot_product_attention
-function dot_product_attention(q, k, v; dropout=nothing)
-  α = dot_product_attention_weights(q, k; dropout)
-  # [α] = [kv_len, q_len, num_heads, batch_size]
-  @tullio x[d, h, i, b] := α[j, i, h, b] * v[d, h, j, b]
-  # [x] = [kv_dim ÷ num_heads, num_heads, q_len, batch_size]
-  
-  return x, α
+function dot_product_attention(q, k, v; dropout = nothing)
+    α = dot_product_attention_weights(q, k; dropout)
+    # [α] = [kv_len, q_len, num_heads, batch_size]
+    @tullio x[d, h, i, b] := α[j, i, h, b] * v[d, h, j, b]
+    # [x] = [kv_dim ÷ num_heads, num_heads, q_len, batch_size]
+
+    return x, α
 end
 
-function dot_product_attention_weights(q, k; dropout=nothing)
-  @tullio α[j, i, h, b] := q[d, h, i, b] * k[d, h, j, b]
-  # [α] = [kv_len, q_len, num_heads, batch_size]
-  α = softmax(α, dims=1)
-  return dropout === nothing ? α : dropout(α)
+function dot_product_attention_weights(q, k; dropout = nothing)
+    @tullio α[j, i, h, b] := q[d, h, i, b] * k[d, h, j, b]
+    # [α] = [kv_len, q_len, num_heads, batch_size]
+    α = softmax(α, dims = 1)
+    return dropout === nothing ? α : dropout(α)
 end
-
 
 struct QKVProj
-  k_proj::Dense
-  v_proj::Dense
-  q_proj::Dense
+    k_proj::Dense
+    v_proj::Dense
+    q_proj::Dense
 end
 
 @functor QKVProj
 
 function QKVProj((in_dim, qkv_dim)::Pair; bias = false)
-  q_in_dim, k_in_dim, v_in_dim = in_dim
-  return QKVProj(
-      Dense(k_in_dim => qkv_dim; bias),
-      Dense(v_in_dim => qkv_dim; bias),
-      Dense(q_in_dim => qkv_dim; bias)
-  )
+    q_in_dim, k_in_dim, v_in_dim = in_dim
+    return QKVProj(
+        Dense(k_in_dim => qkv_dim; bias),
+        Dense(v_in_dim => qkv_dim; bias),
+        Dense(q_in_dim => qkv_dim; bias),
+    )
 end
 
 function (proj::QKVProj)(q_in, k_in, v_in, num_heads)
-  q = proj.q_proj(q_in)
-  @info "size before" size(q) size(q_in)
-  sz = size(q)
-  newsz = (sz[1] ÷ num_heads, num_heads, sz[2:end]...)
-  q = reshape(q, newsz)
-  k = reshape(proj.k_proj(k_in), newsz)
-  v = reshape(proj.v_proj(v_in), newsz)
-  @info "size after" size(q)
-  return q, k, v
+    q = proj.q_proj(q_in)
+    sz = size(q)
+    newsz = (sz[1] ÷ num_heads, num_heads, sz[2:end]...)
+    q = reshape(q, newsz)
+    k = reshape(proj.k_proj(k_in), newsz)
+    v = reshape(proj.v_proj(v_in), newsz)
+    return q, k, v
 end
 
 function (proj::QKVProj)(q_in, k_in, v_in)
-  return (proj.q_proj(q_in), proj.k_proj(k_in), proj.v_proj(v_in))
+    return (proj.q_proj(q_in), proj.k_proj(k_in), proj.v_proj(v_in))
 end
 
+function perf2(; dim = 64, len = 100, batch_size = 32, num_heads = 4)
+    sa = SelfAttention(dim, num_heads)
+    x = rand(Float32, (dim, len, batch_size))
 
-function perf(;dim=64, len=100, batch_size=32, num_heads=4)
-  mha = MultiHeadAttention(dim, num_heads)  
-  x = rand(Float32, (dim, len, batch_size))
+    println("circuits")
+    @btime $sa($x)
+    @btime gradient(m -> sum(m($x)), $sa)
 
-  println("tullio")
-  @btime $mha($x, backend=:tullio);
-  @btime gradient(m -> sum(m($x, backend=:tullio)), $mha);
+    if CUDA.functional()
+        sa_gpu = sa |> gpu
+        x_gpu = x |> gpu
 
-  println("nnalib")
-  @btime $mha($x, $x, $x, backend=:nnalib);
-  @btime gradient(m -> sum(m($x, backend=:nnalib)), $mha);
-  
-  if CUDA.functional()
-    mha_gpu = mha |> gpu
-    x_gpu = x |> gpu
-
-    println("tullio - gpu")
-    @btime $mha_gpu($x_gpu, backend=:tullio);
-    @btime gradient(m -> sum(m($x_gpu, backend=:tullio)), $mha_gpu);
-
-    println("nnalib - gpu")
-    @btime CUDA.@sync $mha_gpu($x_gpu, backend=:nnalib);
-    @btime CUDA.@sync gradient(m -> sum(m($x_gpu, backend=:nnalib)), $mha_gpu);
-  end
-  return nothing
+        println("circuits - gpu")
+        @btime CUDA.@sync $sa_gpu($x_gpu)
+        # @btime gradient(m -> sum(m($x_gpu)), $sa_gpu);
+    end
+    return nothing
 end
 
-function test(;dim=12, len=3, batch_size=2, num_heads=4)
-  mha = MultiHeadAttention(dim, num_heads)  
-  x = rand(Float32, (dim, len, batch_size))
-  y = mha(x, backend=:tullio)
-  @test y isa Array{Float32, 3}
-  @test size(y) == (dim, len, batch_size)
-  y2 = mha(x, backend=:nnalib)
-  @test size(y) == size(y2)
-  @test y2 ≈ y
-  
-  if CUDA.functional()
-    mha_gpu = mha |> gpu
-    x_gpu = x |> gpu
+function perf(; dim = 64, len = 100, batch_size = 32, num_heads = 4)
+    mha = MultiHeadAttention(dim, num_heads)
+    x = rand(Float32, (dim, len, batch_size))
 
-    y_gpu = mha_gpu(x_gpu, backend=:tullio)
-    y_gpu2 = mha_gpu(x_gpu, backend=:nnalib)
-    @test Array(y_gpu) ≈ Array(y_gpu2)
-    @test Array(y_gpu) ≈ y
-  end
-  return nothing
+    println("tullio")
+    @btime $mha($x, backend = :tullio)
+    @btime gradient(m -> sum(m($x, backend = :tullio)), $mha)
+
+    println("nnalib")
+    @btime $mha($x, $x, $x, backend = :nnalib)
+    @btime gradient(m -> sum(m($x, backend = :nnalib)), $mha)
+
+    if CUDA.functional()
+        mha_gpu = mha |> gpu
+        x_gpu = x |> gpu
+
+        println("tullio - gpu")
+        @btime $mha_gpu($x_gpu, backend = :tullio)
+        # @btime gradient(m -> sum(m($x_gpu, backend=:tullio)), $mha_gpu);
+
+        println("nnalib - gpu")
+        @btime CUDA.@sync $mha_gpu($x_gpu, backend = :nnalib)
+        # @btime CUDA.@sync gradient(m -> sum(m($x_gpu, backend=:nnalib)), $mha_gpu);
+    end
+    return nothing
 end
 
 perf()

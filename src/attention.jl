@@ -12,23 +12,18 @@ struct SelfAttention
 end
 Flux.@functor SelfAttention (K, Q, V, O)
 
-function SelfAttention(dembed::Int, nheads::Int; dropout_prob=0.0)
+function SelfAttention(dembed::Int, nheads::Int; dropout_prob = 0.0)
     @assert dembed % nheads == 0 "dimension of model, $dembed must be divisible by number of heads: $nheads"
     dhead = dembed ÷ nheads
-    K = Dense(dembed => dembed, bias=false)
-    V = Dense(dembed => dembed, bias=false)
-    Q = Dense(dembed => dembed, bias=false)
-    O = Dense(dembed => dembed, bias=false)
+    K = Dense(dembed => dembed, bias = false)
+    V = Dense(dembed => dembed, bias = false)
+    Q = Dense(dembed => dembed, bias = false)
+    O = Dense(dembed => dembed, bias = false)
     return SelfAttention(K, Q, V, O, Dropout(dropout_prob), dhead, nheads)
 end
 
-
 # query, key, value dimensions are (dembed, sequence_length, batch_size)
-function (sa::SelfAttention)(
-    query::A3{T},
-    key::A3{T},
-    value::A3{T},
-) where {T}
+function (sa::SelfAttention)(query::A3{T}, key::A3{T}, value::A3{T}) where {T}
     # (dembed, sequence_length, batch_size)
     q = sa.Q(query)
     k = sa.K(key)
