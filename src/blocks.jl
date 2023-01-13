@@ -98,7 +98,7 @@ function GPT(
 end
 
 function (gpt::GPT)(x::AbstractArray{T}) where {T}
-    x = gpt.embedding(x)
+    x = gpt.token_embedding(x)
     x = gpt.drop(x)
     x = gpt.encoder(x)
     x = gpt.ln(x)
