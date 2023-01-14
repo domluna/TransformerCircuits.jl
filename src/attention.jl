@@ -6,24 +6,31 @@ struct SelfAttention
     O::Dense
 
     drop::Dropout
+    mask::Any
 
     dhead::Int
     nheads::Int
 end
 Flux.@functor SelfAttention (K, Q, V, O)
 
-function SelfAttention(dembed::Int, nheads::Int; dropout_prob = 0.0)
+function SelfAttention(
+    nheads::Int,
+    dembed::Int;
+    mask = NeuralAttentionlib.CausalMask(),
+    dropout_prob = 0.1,
+)
     @assert dembed % nheads == 0 "dimension of model, $dembed must be divisible by number of heads: $nheads"
     dhead = dembed ÷ nheads
     K = Dense(dembed => dembed, bias = false)
     V = Dense(dembed => dembed, bias = false)
     Q = Dense(dembed => dembed, bias = false)
     O = Dense(dembed => dembed, bias = false)
-    return SelfAttention(K, Q, V, O, Dropout(dropout_prob), dhead, nheads)
+    return SelfAttention(K, Q, V, O, Dropout(dropout_prob), mask, dhead, nheads)
 end
 
 # query, key, value dimensions are (dembed, sequence_length, batch_size)
 function (sa::SelfAttention)(query::A3{T}, key::A3{T}, value::A3{T}) where {T}
+    sa.drop.p
     # (dembed, sequence_length, batch_size)
     q = sa.Q(query)
     k = sa.K(key)
@@ -38,7 +45,7 @@ function (sa::SelfAttention)(query::A3{T}, key::A3{T}, value::A3{T}) where {T}
     # and then returns it back to
     #
     # (dembed, sequence_length, batch_size)
-    x = NeuralAttentionlib.multihead_qkv_attention(sa.nheads, q, k, v)
+    x = NeuralAttentionlib.multihead_qkv_attention(sa.nheads, q, k, v, sa.mask, sa.drop.p)
 
     x = sa.drop(sa.O(x))
     return x

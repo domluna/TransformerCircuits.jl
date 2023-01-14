@@ -7,7 +7,6 @@ using NeuralAttentionlib
 
 const A3{T} = AbstractArray{T,3}
 
-include("encoding.jl")
 include("attention.jl")
 include("blocks.jl")
 
