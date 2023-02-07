@@ -1,10 +1,11 @@
 using Flux
 using TransformerCircuits
+using StatsBase
 
 # Form the dataset
 text = read("../data/input.txt", String)
 chars = Set(text)
-vocab_size = length(chars)
+vocabsize = length(chars)
 char2idx = Dict(c => i for (i, c) in enumerate(chars))
 idx2char = Dict(i => c for (i, c) in enumerate(chars))
 
@@ -17,40 +18,85 @@ split_idx = Int(round(length(encoded_text) * 0.9))
 train_data = encoded_text[1:split_idx]
 val_data = encoded_text[split_idx+1:end]
 
-block_size = 8
+blocksize = 8
 
 # we can add truncated tokens or we can cutoff tokens that go over the modulo of the block size
 
-function cutoff_data(data, block_size::Int)
+function cutoff_data(data, blocksize::Int)
     n = length(data)
-    n = n - n % block_size
+    n = n - n % blocksize
     return data[1:n]
 end
-train_data = cutoff_data(train_data, block_size)
-val_data = cutoff_data(val_data, block_size)
+train_data = cutoff_data(train_data, blocksize)
+val_data = cutoff_data(val_data, blocksize)
 
-function generate_batch(encoded_data::Vector{Int64}, batch_size::Int, block_size::Int)
+function generate_batch(encoded_data::Vector{Int64}, batchsize::Int, blocksize::Int, vocabsize::Int)
     n = length(encoded_data)
-    idxs = rand(1:n-block_size, batch_size)
-    x = zeros(Int64, block_size, batch_size)
-    y = zeros(Int64, block_size, batch_size)
-    for i in 1:batch_size
-        x[:, i] = encoded_data[idxs[i]:idxs[i]+block_size-1]
-        y[:, i] = encoded_data[idxs[i]+1:idxs[i]+block_size]
+    idxs = rand(1:n-blocksize, batchsize)
+    x = zeros(Int64, blocksize, batchsize)
+    y = zeros(Int64, blocksize, batchsize)
+    for i in 1:batchsize
+        x[:, i] = encoded_data[idxs[i]:idxs[i]+blocksize-1]
+        y[:, i] = encoded_data[idxs[i]+1:idxs[i]+blocksize]
     end
-    return x, y
+    return x, Flux.onehotbatch(y, 1:vocabsize)
 end
 
-X, Y = generate_batch(train_data, length(train_data)  ÷ block_size, block_size)
+X, Y = generate_batch(train_data, length(train_data)  ÷ blocksize, blocksize, vocabsize)
 
-batch_size = 4
+batchsize = 128
+data = Flux.DataLoader((X, Y); batchsize)
 
-data = Flux.DataLoader((X, Y), batchsize = batch_size)
-
-model = Bigram(vocab_size)
-o = model(x)
-
+model = Bigram(vocabsize)
 optim = Flux.setup(Adam(), model)
-for epoch in 1:1000
-    Flux.train!((m, x, y) -> Flux.Losses.cross_entropy(m(x), y), model, data, optim)
+
+nepochs = 10
+for epoch in 1:nepochs
+    Flux.train!((m, x, y) -> (loss = Flux.Losses.crossentropy(m(x), y); @info "" loss; loss), model, data, optim)
 end
+
+# given an initial sequence, generate a sequence of length n
+function generate_text(model, seq::Vector{Int}, n::Int)
+    generated = copy(seq)
+    for _ in 1:n
+        context = reshape(generated, :, 1)
+        y = model(context)
+        output = y[:, end, end]
+        idx = StatsBase.sample(1:length(output), ProbabilityWeights(output))
+        generated = vcat(generated, idx)
+    end
+    return generated
+end
+
+function generate_text(model::Matrix{Float64}, seq::Vector{Int}, n::Int)
+    generated = copy(seq)
+    for _ in 1:n
+        context = generated[end]
+        y = model[:, context]
+        idx = StatsBase.sample(1:length(y), ProbabilityWeights(y))
+        generated = vcat(generated, idx)
+    end
+    return generated
+end
+
+generate_text(model, seq::String; n::Int=1) = generate_text(model, encode(seq), n)
+generate_text(model, char::Char; n::Int=1) = generate_text(model, encode(string(char)), n)
+
+function standard_bigram_model(text::String)
+    chars = Set(text)
+    vocabsize = length(chars)
+    char2idx = Dict(c => i for (i, c) in enumerate(chars))
+
+    m = zeros(Int, vocabsize, vocabsize)
+
+    for i in 1:length(text)-1
+        # m[char2idx[text[i]], char2idx[text[i+1]]] += 1
+        m[char2idx[text[i+1]], char2idx[text[i]]] += 1
+    end
+
+    m = m ./ sum(m, dims=1)
+    return m
+end
+
+M = standard_bigram_model(text)
+
