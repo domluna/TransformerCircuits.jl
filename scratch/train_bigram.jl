@@ -30,7 +30,12 @@ end
 train_data = cutoff_data(train_data, blocksize)
 val_data = cutoff_data(val_data, blocksize)
 
-function generate_batch(encoded_data::Vector{Int64}, batchsize::Int, blocksize::Int, vocabsize::Int)
+function generate_batch(
+    encoded_data::Vector{Int64},
+    batchsize::Int,
+    blocksize::Int,
+    vocabsize::Int,
+)
     n = length(encoded_data)
     idxs = rand(1:n-blocksize, batchsize)
     x = zeros(Int64, blocksize, batchsize)
@@ -42,7 +47,7 @@ function generate_batch(encoded_data::Vector{Int64}, batchsize::Int, blocksize::
     return x, Flux.onehotbatch(y, 1:vocabsize)
 end
 
-X, Y = generate_batch(train_data, length(train_data)  ÷ blocksize, blocksize, vocabsize)
+X, Y = generate_batch(train_data, length(train_data) ÷ blocksize, blocksize, vocabsize)
 
 batchsize = 128
 data = Flux.DataLoader((X, Y); batchsize)
@@ -52,7 +57,13 @@ optim = Flux.setup(Adam(), model)
 
 nepochs = 10
 for epoch in 1:nepochs
-    Flux.train!((m, x, y) -> (loss = Flux.Losses.crossentropy(m(x), y); @info "" loss; loss), model, data, optim)
+    Flux.train!(
+        (m, x, y) ->
+            (loss = Flux.Losses.crossentropy(m(x), y); println("Loss $loss"); loss),
+        model,
+        data,
+        optim,
+    )
 end
 
 # given an initial sequence, generate a sequence of length n
@@ -79,8 +90,8 @@ function generate_text(model::Matrix{Float64}, seq::Vector{Int}, n::Int)
     return generated
 end
 
-generate_text(model, seq::String; n::Int=1) = generate_text(model, encode(seq), n)
-generate_text(model, char::Char; n::Int=1) = generate_text(model, encode(string(char)), n)
+generate_text(model, seq::String; n::Int = 1) = generate_text(model, encode(seq), n)
+generate_text(model, char::Char; n::Int = 1) = generate_text(model, encode(string(char)), n)
 
 function standard_bigram_model(text::String)
     chars = Set(text)
@@ -90,13 +101,18 @@ function standard_bigram_model(text::String)
     m = zeros(Int, vocabsize, vocabsize)
 
     for i in 1:length(text)-1
-        # m[char2idx[text[i]], char2idx[text[i+1]]] += 1
+        # access by column
         m[char2idx[text[i+1]], char2idx[text[i]]] += 1
     end
 
-    m = m ./ sum(m, dims=1)
+    m = m ./ sum(m, dims = 1)
     return m
 end
 
 M = standard_bigram_model(text)
 
+s = join(sort(collect(chars)), "")
+e = encode(s)
+
+join(decode(generate_text(M, s, n = 50)), "") |> print
+join(decode(generate_text(model, s, n = 50)), "") |> print
