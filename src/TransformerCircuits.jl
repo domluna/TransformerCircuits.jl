@@ -1,6 +1,6 @@
 module TransformerCircuits
 
-export SelfAttention, FFN, Block, GPT, Bigram
+export SelfAttention, FFN, Block, GPT, Bigram, NGram
 
 using Flux
 using NeuralAttentionlib
@@ -12,5 +12,6 @@ const A4{T} = AbstractArray{T,4} where {T<:Union{Float32,Float16}}
 include("attention.jl")
 include("blocks.jl")
 include("bigram.jl")
+include("ngram.jl")
 
 end

@@ -1,9 +1,10 @@
 using Flux
 using TransformerCircuits
 using StatsBase
+using Plots
 
 # Form the dataset
-text = read("../data/input.txt", String)
+text = read("data/input.txt", String)
 chars = Set(text)
 vocabsize = length(chars)
 char2idx = Dict(c => i for (i, c) in enumerate(chars))
@@ -21,7 +22,6 @@ val_data = encoded_text[split_idx+1:end]
 blocksize = 8
 
 # we can add truncated tokens or we can cutoff tokens that go over the modulo of the block size
-
 function cutoff_data(data, blocksize::Int)
     n = length(data)
     n = n - n % blocksize
@@ -47,24 +47,45 @@ function generate_batch(
     return x, Flux.onehotbatch(y, 1:vocabsize)
 end
 
-X, Y = generate_batch(train_data, length(train_data) ÷ blocksize, blocksize, vocabsize)
-
 batchsize = 128
-data = Flux.DataLoader((X, Y); batchsize)
+X, Y = generate_batch(train_data, length(train_data) ÷ blocksize, blocksize, vocabsize)
+train_data = Flux.DataLoader((X, Y); batchsize)
+X, Y = generate_batch(val_data, length(val_data) ÷ blocksize, blocksize, vocabsize)
+val_data = Flux.DataLoader((X, Y); batchsize)
 
-model = Bigram(vocabsize)
-optim = Flux.setup(Adam(), model)
-
-nepochs = 10
-for epoch in 1:nepochs
-    Flux.train!(
-        (m, x, y) ->
-            (loss = Flux.Losses.crossentropy(m(x), y); println("Loss $loss"); loss),
-        model,
-        data,
-        optim,
-    )
+function estimate_loss(model, data::Flux.Data.DataLoader; evaliters::Int = 100)
+    loss = 0.0
+    D = collect(data)
+    for _ in 1:evaliters
+        x, y = rand(D)
+        ŷ = model(x)
+        loss += Flux.Losses.crossentropy(ŷ, y)
+    end
+    return loss / evaliters
 end
+
+function train_model!(model, data::Flux.Data.DataLoader, optim; nepochs::Int = 10)
+    for _ in 1:nepochs
+        Flux.train!(
+            (m, x, y) -> (loss = Flux.Losses.crossentropy(m(x), y); loss),
+            model,
+            train_data,
+            optim,
+        )
+    end
+end
+
+bigram_model = Bigram(vocabsize)
+bigram_optim = Flux.setup(AdamW(), model)
+train_model!(bigram_model, train_data, bigram_optim, nepochs=10)
+# julia> estimate_loss(model, train_data, evaliters=100)
+# 2.445962369441986
+#
+# julia> estimate_loss(model, val_data, evaliters=100)
+# 2.4857913732528685
+
+# It's hard to do any better than this since the prediction is only based on the most recent
+# previous character. Vowels or whitespace will be a probable next output for many characters.
 
 # given an initial sequence, generate a sequence of length n
 function generate_text(model, seq::Vector{Int}, n::Int)
@@ -90,8 +111,8 @@ function generate_text(model::Matrix{Float64}, seq::Vector{Int}, n::Int)
     return generated
 end
 
-generate_text(model, seq::String; n::Int = 1) = generate_text(model, encode(seq), n)
-generate_text(model, char::Char; n::Int = 1) = generate_text(model, encode(string(char)), n)
+generate_text(bigram_model, seq::String; n::Int = 1) = generate_text(model, encode(seq), n)
+generate_text(bigram_model, char::Char; n::Int = 1) = generate_text(model, encode(string(char)), n)
 
 function standard_bigram_model(text::String)
     chars = Set(text)
@@ -115,4 +136,48 @@ s = join(sort(collect(chars)), "")
 e = encode(s)
 
 join(decode(generate_text(M, s, n = 50)), "") |> print
-join(decode(generate_text(model, s, n = 50)), "") |> print
+join(decode(generate_text(bigram_model, s, n = 50)), "") |> print
+
+sorted_chars = join(decode(collect(1:vocabsize)), "")
+char_list = split(sorted_chars, "")
+
+# plotlyjs()
+# Plots.heatmap(M, xticks=(1:vocabsize, char_list), yticks=(1:vocabsize, char_list), aspect_ratio=1, size=(1200, 800), xtickfont= font(10), ytickfont=font(10), hover=char_list)
+Plots.heatmap(
+    M,
+    xticks = (1:vocabsize, char_list),
+    yticks = (1:vocabsize, char_list),
+    aspect_ratio = 1,
+    size = (1200, 800),
+    xtickfont = font(10),
+    ytickfont = font(10),
+)
+
+# same because context size doesn't matter
+o1 = bigram_model(reshape(encode(sorted_chars), (1, :)))
+o2 = bigram_model(reshape(encode(sorted_chars), (:, 1)))
+e1 = o1[:, 1, 1]
+e2 = reshape(o2[:, 1, :], :)
+e1 ≈ e2 # true
+
+# reshape so it's the same as the bigram model
+o2 = reshape(o2, (vocabsize, vocabsize))
+Plots.heatmap(
+    o2,
+    xticks = (1:vocabsize, char_list),
+    yticks = (1:vocabsize, char_list),
+    aspect_ratio = 1,
+    size = (1200, 800),
+    xtickfont = font(10),
+    ytickfont = font(10),
+)
+
+# n-gram model
+# all previous context is used
+# TODO: context still not used ???
+
+ngram_model = NGram(vocabsize, blocksize, 32)
+ngram_optim = Flux.setup(AdamW(), ngram_model)
+train_model!(ngram_model, train_data, ngram_optim; nepochs=10)
+
+estimate_loss(ngram_model, train_data, evaliters=100)
