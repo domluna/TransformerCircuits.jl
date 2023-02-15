@@ -40,7 +40,7 @@ function generate_batch(
     idxs = rand(1:n-blocksize, batchsize)
     x = zeros(Int64, blocksize, batchsize)
     y = zeros(Int64, blocksize, batchsize)
-    for i in 1:batchsize
+    for i = 1:batchsize
         x[:, i] = encoded_data[idxs[i]:idxs[i]+blocksize-1]
         y[:, i] = encoded_data[idxs[i]+1:idxs[i]+blocksize]
     end
@@ -56,7 +56,7 @@ val_data = Flux.DataLoader((X, Y); batchsize)
 function estimate_loss(model, data::Flux.Data.DataLoader; evaliters::Int = 100)
     loss = 0.0
     D = collect(data)
-    for _ in 1:evaliters
+    for _ = 1:evaliters
         x, y = rand(D)
         ŷ = model(x)
         loss += Flux.Losses.crossentropy(ŷ, y)
@@ -65,19 +65,23 @@ function estimate_loss(model, data::Flux.Data.DataLoader; evaliters::Int = 100)
 end
 
 function train_model!(model, data::Flux.Data.DataLoader, optim; nepochs::Int = 10)
-    for _ in 1:nepochs
+    for _ = 1:nepochs
         Flux.train!(
             (m, x, y) -> (loss = Flux.Losses.crossentropy(m(x), y); loss),
             model,
             train_data,
             optim,
         )
+        @info "Training loss" estimate_loss(model, train_data, evaliters = 30)
     end
 end
 
+# End of data setup
+# Train the model
+
 bigram_model = Bigram(vocabsize)
 bigram_optim = Flux.setup(AdamW(), model)
-train_model!(bigram_model, train_data, bigram_optim, nepochs=10)
+train_model!(bigram_model, train_data, bigram_optim, nepochs = 10)
 # julia> estimate_loss(model, train_data, evaliters=100)
 # 2.445962369441986
 #
@@ -90,8 +94,8 @@ train_model!(bigram_model, train_data, bigram_optim, nepochs=10)
 # given an initial sequence, generate a sequence of length n
 function generate_text(model, seq::Vector{Int}, n::Int)
     generated = copy(seq)
-    for _ in 1:n
-        context = reshape(generated, :, 1)
+    for _ = 1:n
+        context = reshape(generated[max(size(generated, 1) - blocksize + 1, 1):end], (:, 1))
         y = model(context)
         output = y[:, end, end]
         idx = StatsBase.sample(1:length(output), ProbabilityWeights(output))
@@ -99,10 +103,12 @@ function generate_text(model, seq::Vector{Int}, n::Int)
     end
     return generated
 end
+generate_text(model, seq::String; n::Int = 1) = generate_text(model, encode(seq), n)
+generate_text(model, char::Char; n::Int = 1) = generate_text(model, encode(string(char)), n)
 
 function generate_text(model::Matrix{Float64}, seq::Vector{Int}, n::Int)
     generated = copy(seq)
-    for _ in 1:n
+    for _ = 1:n
         context = generated[end]
         y = model[:, context]
         idx = StatsBase.sample(1:length(y), ProbabilityWeights(y))
@@ -111,9 +117,6 @@ function generate_text(model::Matrix{Float64}, seq::Vector{Int}, n::Int)
     return generated
 end
 
-generate_text(bigram_model, seq::String; n::Int = 1) = generate_text(model, encode(seq), n)
-generate_text(bigram_model, char::Char; n::Int = 1) = generate_text(model, encode(string(char)), n)
-
 function standard_bigram_model(text::String)
     chars = Set(text)
     vocabsize = length(chars)
@@ -121,7 +124,7 @@ function standard_bigram_model(text::String)
 
     m = zeros(Int, vocabsize, vocabsize)
 
-    for i in 1:length(text)-1
+    for i = 1:length(text)-1
         # access by column
         m[char2idx[text[i+1]], char2idx[text[i]]] += 1
     end
@@ -174,10 +177,14 @@ Plots.heatmap(
 
 # n-gram model
 # all previous context is used
-# TODO: context still not used ???
+# self attention seems to allow the context to communicate
 
-ngram_model = NGram(vocabsize, blocksize, 32)
-ngram_optim = Flux.setup(AdamW(), ngram_model)
-train_model!(ngram_model, train_data, ngram_optim; nepochs=10)
+ngram_model = NGram(vocabsize, blocksize, 32; nheads = 4);
+ngram_optim = Flux.setup(AdamW(), ngram_model);
+train_model!(ngram_model, train_data, ngram_optim; nepochs = 10)
+train_loss = estimate_loss(ngram_model, train_data, evaliters = 100)
+@info "" train_loss
+val_loss = estimate_loss(ngram_model, val_data, evaliters = 100)
+@info "" val_loss
 
-estimate_loss(ngram_model, train_data, evaliters=100)
+# more than 1 head leads to a better loss

@@ -18,13 +18,14 @@ function SelfAttention(
     dembed::Int;
     mask = NeuralAttentionlib.CausalMask(),
     dropout_prob = 0.1,
+    doutput::Int = dembed,
 )
     @assert dembed % nheads == 0 "dimension of model, $dembed must be divisible by number of heads: $nheads"
     dhead = dembed ÷ nheads
     K = Dense(dembed => dembed, bias = false)
     V = Dense(dembed => dembed, bias = false)
     Q = Dense(dembed => dembed, bias = false)
-    O = Dense(dembed => dembed, bias = false)
+    O = Dense(dembed => doutput, bias = false)
     return SelfAttention(K, Q, V, O, Dropout(dropout_prob), mask, dhead, nheads)
 end
 
@@ -34,7 +35,7 @@ function (sa::SelfAttention)(query::A3{T}, key::A3{T}, value::A3{T}) where {T}
     # (dembed, sequence_length, batch_size)
     q = sa.Q(query)
     k = sa.K(key)
-    v = sa.Q(value)
+    v = sa.V(value)
     # this takes care of reshaping the matrices to allow for per head attention
     # and then reshaping back to the original shape
     #

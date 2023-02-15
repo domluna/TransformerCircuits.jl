@@ -28,10 +28,10 @@ end
 Flux.@functor Block
 
 function Block(
-    dembed::Int,
-    dff::Int;
+    dembed::Int;
     dff_activation::Function = gelu,
     nheads::Int = 1,
+    dff::Int = dembed * 4,
     kwargs...,
 )
     Block(SelfAttention(nheads, dembed), FFN(dembed, dff; dff_activation, kwargs...))
@@ -73,9 +73,7 @@ function GPT(;
         Flux.Embedding(vocab_size, dembed),
         Dropout(dropout_prob),
         Flux.Chain(
-            [
-                Block(dembed, dff; nheads, dropout_prob, dff_activation) for _ in 1:nlayers
-            ]...,
+            [Block(dembed, dff; nheads, dropout_prob, dff_activation) for _ = 1:nlayers]...,
         ),
         LayerNorm(dembed),
         Dense(dembed, vocab_size),
