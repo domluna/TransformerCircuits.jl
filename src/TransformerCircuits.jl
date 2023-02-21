@@ -3,7 +3,6 @@ module TransformerCircuits
 export SelfAttention, FFN, Block, GPT, Bigram, NGram
 
 using Flux
-using NeuralAttentionlib
 
 const A2{T} = AbstractArray{T,2} where {T<:Union{Float32,Float16}}
 const A3{T} = AbstractArray{T,3} where {T<:Union{Float32,Float16}}

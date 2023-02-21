@@ -6,6 +6,7 @@ struct SelfAttention
     O::Dense
 
     drop::Dropout
+    # TODO: remove this unless we know the context length
     mask::Any
 
     dhead::Int
@@ -16,7 +17,7 @@ Flux.@functor SelfAttention (K, Q, V, O)
 function SelfAttention(
     nheads::Int,
     dembed::Int;
-    mask = NeuralAttentionlib.CausalMask(),
+    mask = nothing,
     dropout_prob = 0.1,
     doutput::Int = dembed,
 )
@@ -46,7 +47,7 @@ function (sa::SelfAttention)(query::A3{T}, key::A3{T}, value::A3{T}) where {T}
     # and then returns it back to
     #
     # (dembed, sequence_length, batch_size)
-    # x = NeuralAttentionlib.multihead_qkv_attention(sa.nheads, q, k, v, sa.mask, sa.drop.p)
+    # TODO: If the context length is known this can be static
     M = make_causal_mask(q)
     x, _ = dot_product_attention(q, k, v; mask=M, nheads=sa.nheads, fdrop=sa.drop)
 
