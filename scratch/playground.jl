@@ -18,7 +18,7 @@ split_idx = Int(round(length(encoded_text) * 0.9))
 train_data = encoded_text[1:split_idx]
 val_data = encoded_text[split_idx+1:end]
 
-blocksize = 8
+blocksize = 128
 vocabsize = length(char2idx)
 
 # we can add truncated tokens or we can cutoff tokens that go over the modulo of the block size
@@ -92,16 +92,23 @@ train_model!(bigram_model, train_data, bigram_optim, nepochs = 10)
 # previous character. Vowels or whitespace will be a probable next output for many characters.
 
 # given an initial sequence, generate a sequence of length n
+# If the sequence is shorter than the blocksize, we pad it with newlines (prepend)
+# and then remove the newlines from the output
 function generate_text(model, seq::Vector{Int}, n::Int)
     generated = copy(seq)
+    m = blocksize - length(generated)
+    if length(generated) < blocksize
+        generated = vcat(encode(repeat('\n', m)), generated)
+    end
     for _ = 1:n
-        context = reshape(generated[max(size(generated, 1) - blocksize + 1, 1):end], (:, 1))
+        context_size = min(length(generated), blocksize)
+        context = reshape(generated[max(size(generated, 1) - blocksize + 1, 1):end], (context_size, 1))
         y = model(context)
         output = y[:, end, end]
         idx = StatsBase.sample(1:length(output), ProbabilityWeights(output))
         generated = vcat(generated, idx)
     end
-    return generated
+    length(generated) < blocksize ? generated[end-blocksize+1:end] : generated 
 end
 generate_text(model, seq::String; n::Int = 1) = generate_text(model, encode(seq), n)
 generate_text(model, char::Char; n::Int = 1) = generate_text(model, encode(string(char)), n)
@@ -187,11 +194,11 @@ train_loss = estimate_loss(ngram_model, train_data, evaliters = 100)
 val_loss = estimate_loss(ngram_model, val_data, evaliters = 100)
 @info "" val_loss
 
-circ = Circuit(vocabsize, blocksize, 128; nheads = 8);
+circ = TransformerCircuits.Circuit(vocabsize, blocksize, 128; nheads = 8);
 opt = Flux.setup(AdamW(5e-4), circ);
-train_model!(ngram_model, train_data, opt; nepochs = 10)
-train_loss = estimate_loss(circ, train_data, evaliters = 100)
-@info "" train_loss
-val_loss = estimate_loss(circ, val_data, evaliters = 100)
-@info "" val_loss
+train_model!(circ, train_data, opt; nepochs = 10)
+train_loss = estimate_loss(circ, train_data, evaliters = 50)
+@info "Training loss" train_loss
+val_loss = estimate_loss(circ, val_data, evaliters = 50)
+@info "Validation loss" val_loss
 # more than 1 head leads to a better loss

@@ -46,7 +46,9 @@ function (sa::SelfAttention)(query::A3{T}, key::A3{T}, value::A3{T}) where {T}
     # and then returns it back to
     #
     # (dembed, sequence_length, batch_size)
-    x = NeuralAttentionlib.multihead_qkv_attention(sa.nheads, q, k, v, sa.mask, sa.drop.p)
+    # x = NeuralAttentionlib.multihead_qkv_attention(sa.nheads, q, k, v, sa.mask, sa.drop.p)
+    M = make_causal_mask(q)
+    x, _ = dot_product_attention(q, k, v; mask=M, nheads=sa.nheads, fdrop=sa.drop)
 
     x = sa.drop(sa.O(x))
     return x
