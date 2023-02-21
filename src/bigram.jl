@@ -1,3 +1,4 @@
+# 0 layer
 struct Bigram
     embed::Flux.Embedding
 end

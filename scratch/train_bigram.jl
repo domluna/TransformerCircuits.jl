@@ -11,7 +11,6 @@ char2idx = Dict(c => i for (i, c) in enumerate(chars))
 idx2char = Dict(i => c for (i, c) in enumerate(chars))
 
 encode(text) = [char2idx[c] for c in text]
-
 decode(encoded) = [idx2char[i] for i in encoded]
 
 encoded_text = encode(text)
@@ -20,6 +19,7 @@ train_data = encoded_text[1:split_idx]
 val_data = encoded_text[split_idx+1:end]
 
 blocksize = 8
+vocabsize = length(char2idx)
 
 # we can add truncated tokens or we can cutoff tokens that go over the modulo of the block size
 function cutoff_data(data, blocksize::Int)
@@ -187,4 +187,11 @@ train_loss = estimate_loss(ngram_model, train_data, evaliters = 100)
 val_loss = estimate_loss(ngram_model, val_data, evaliters = 100)
 @info "" val_loss
 
+circ = Circuit(vocabsize, blocksize, 128; nheads = 8);
+opt = Flux.setup(AdamW(5e-4), circ);
+train_model!(ngram_model, train_data, opt; nepochs = 10)
+train_loss = estimate_loss(circ, train_data, evaliters = 100)
+@info "" train_loss
+val_loss = estimate_loss(circ, val_data, evaliters = 100)
+@info "" val_loss
 # more than 1 head leads to a better loss

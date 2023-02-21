@@ -13,5 +13,6 @@ include("attention.jl")
 include("blocks.jl")
 include("bigram.jl")
 include("ngram.jl")
+include("circuit.jl")
 
 end
