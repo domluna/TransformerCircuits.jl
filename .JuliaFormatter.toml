@@ -1,0 +1,5 @@
+remove_extra_newlines = true
+conditional_to_if = true
+always_for_in = true
+margin = 103
+indent = 4

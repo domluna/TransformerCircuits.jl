@@ -72,9 +72,7 @@ function GPT(;
     GPT(
         Flux.Embedding(vocab_size, dembed),
         Dropout(dropout_prob),
-        Flux.Chain(
-            [Block(dembed, dff; nheads, dropout_prob, dff_activation) for _ = 1:nlayers]...,
-        ),
+        Flux.Chain([Block(dembed, dff; nheads, dropout_prob, dff_activation) for _ in 1:nlayers]...),
         LayerNorm(dembed),
         Dense(dembed, vocab_size),
     )

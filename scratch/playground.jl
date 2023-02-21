@@ -30,17 +30,12 @@ end
 train_data = cutoff_data(train_data, blocksize)
 val_data = cutoff_data(val_data, blocksize)
 
-function generate_batch(
-    encoded_data::Vector{Int64},
-    batchsize::Int,
-    blocksize::Int,
-    vocabsize::Int,
-)
+function generate_batch(encoded_data::Vector{Int64}, batchsize::Int, blocksize::Int, vocabsize::Int)
     n = length(encoded_data)
     idxs = rand(1:n-blocksize, batchsize)
     x = zeros(Int64, blocksize, batchsize)
     y = zeros(Int64, blocksize, batchsize)
-    for i = 1:batchsize
+    for i in 1:batchsize
         x[:, i] = encoded_data[idxs[i]:idxs[i]+blocksize-1]
         y[:, i] = encoded_data[idxs[i]+1:idxs[i]+blocksize]
     end
@@ -56,7 +51,7 @@ val_data = Flux.DataLoader((X, Y); batchsize)
 function estimate_loss(model, data::Flux.Data.DataLoader; evaliters::Int = 100)
     loss = 0.0
     D = collect(data)
-    for _ = 1:evaliters
+    for _ in 1:evaliters
         x, y = rand(D)
         ŷ = model(x)
         loss += Flux.Losses.crossentropy(ŷ, y)
@@ -65,7 +60,7 @@ function estimate_loss(model, data::Flux.Data.DataLoader; evaliters::Int = 100)
 end
 
 function train_model!(model, data::Flux.Data.DataLoader, optim; nepochs::Int = 10)
-    for _ = 1:nepochs
+    for _ in 1:nepochs
         Flux.train!(
             (m, x, y) -> (loss = Flux.Losses.crossentropy(m(x), y); loss),
             model,
@@ -100,7 +95,7 @@ function generate_text(model, seq::Vector{Int}, n::Int)
     if length(generated) < blocksize
         generated = vcat(encode(repeat('\n', m)), generated)
     end
-    for _ = 1:n
+    for _ in 1:n
         context_size = min(length(generated), blocksize)
         context = reshape(generated[max(size(generated, 1) - blocksize + 1, 1):end], (context_size, 1))
         y = model(context)
@@ -108,14 +103,14 @@ function generate_text(model, seq::Vector{Int}, n::Int)
         idx = StatsBase.sample(1:length(output), ProbabilityWeights(output))
         generated = vcat(generated, idx)
     end
-    length(generated) < blocksize ? generated[end-blocksize+1:end] : generated 
+    length(generated) < blocksize ? generated[end-blocksize+1:end] : generated
 end
 generate_text(model, seq::String; n::Int = 1) = generate_text(model, encode(seq), n)
 generate_text(model, char::Char; n::Int = 1) = generate_text(model, encode(string(char)), n)
 
 function generate_text(model::Matrix{Float64}, seq::Vector{Int}, n::Int)
     generated = copy(seq)
-    for _ = 1:n
+    for _ in 1:n
         context = generated[end]
         y = model[:, context]
         idx = StatsBase.sample(1:length(y), ProbabilityWeights(y))
@@ -131,7 +126,7 @@ function standard_bigram_model(text::String)
 
     m = zeros(Int, vocabsize, vocabsize)
 
-    for i = 1:length(text)-1
+    for i in 1:length(text)-1
         # access by column
         m[char2idx[text[i+1]], char2idx[text[i]]] += 1
     end
@@ -202,3 +197,31 @@ train_loss = estimate_loss(circ, train_data, evaliters = 50)
 val_loss = estimate_loss(circ, val_data, evaliters = 50)
 @info "Validation loss" val_loss
 # more than 1 head leads to a better loss
+#
+# 2 layers decreases the loss more.
+# julia> train_model!(circ, train_data, opt; nepochs = 10)
+# ┌ Info: Training loss
+# └   estimate_loss(model, train_data, evaliters = 30) = 1.994046966234843
+# ┌ Info: Training loss
+# └   estimate_loss(model, train_data, evaliters = 30) = 1.8851592381795248
+# ┌ Info: Training loss
+# └   estimate_loss(model, train_data, evaliters = 30) = 1.796162517865499
+# ┌ Info: Training loss
+# └   estimate_loss(model, train_data, evaliters = 30) = 1.7615622440973917
+# ┌ Info: Training loss
+# └   estimate_loss(model, train_data, evaliters = 30) = 1.7299057960510253
+# ┌ Info: Training loss
+# └   estimate_loss(model, train_data, evaliters = 30) = 1.7040851791699727
+# ┌ Info: Training loss
+# └   estimate_loss(model, train_data, evaliters = 30) = 1.7044827143351238
+# ┌ Info: Training loss
+# └   estimate_loss(model, train_data, evaliters = 30) = 1.686379869778951
+# ┌ Info: Training loss
+# └   estimate_loss(model, train_data, evaliters = 30) = 1.6706287344296773
+# ┌ Info: Training loss
+# └   estimate_loss(model, train_data, evaliters = 30) = 1.6709984064102172
+# 
+# julia>
+# 
+# julia> val_loss = estimate_loss(circ, val_data, evaliters = 50)
+# 1.876984875202179

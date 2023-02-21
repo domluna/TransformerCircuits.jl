@@ -6,25 +6,11 @@ struct Circuit
 end
 Flux.@functor Circuit
 
-function Circuit(
-    vocab_size::Int,
-    block_size::Int,
-    embed_size::Int;
-    nheads::Int = 1,
-    nlayers::Int = 2,
-)
+function Circuit(vocab_size::Int, block_size::Int, embed_size::Int; nheads::Int = 1, nlayers::Int = 2)
     Circuit(
         Flux.Embedding(vocab_size, embed_size),
         Flux.Embedding(block_size, embed_size),
-        Flux.Chain(
-            [
-                Block(
-                    embed_size;
-                    nheads,
-                    dropout_prob = Float32(0.1),
-                ) for _ = 1:nlayers
-            ]...,
-        ),
+        Flux.Chain([Block(embed_size; nheads, dropout_prob = Float32(0.1)) for _ in 1:nlayers]...),
         Flux.Dense(embed_size, vocab_size),
     )
 end
