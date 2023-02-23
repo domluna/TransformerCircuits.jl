@@ -15,12 +15,12 @@ function Circuit(vocab_size::Int, block_size::Int, embed_size::Int; nheads::Int 
     )
 end
 
-function (model::Circuit)(x::Matrix{Int64})
+function (model::Circuit)(x::Matrix{Int64}; idx = size(x, 1))
     tokemb = model.token_embed(x)
-    T = size(model.position_embed.weight, 2)
-    posemb = model.position_embed(1:T)
+    posemb = model.position_embed(1:idx)
     v = tokemb .+ posemb
     v = model.blocks(v)
     v = model.outtoken(v)
     return softmax(v, dims = 1)
 end
+(model::Circuit)(x::Vector{Int64}; kwargs...) = model(reshape(x, :, 1); kwargs...)

@@ -1,5 +1,7 @@
+using StatsBase
+
 # we can add truncated tokens or we can cutoff tokens that go over the modulo of the block size
-function cutoff_data(data, blocksize::Int)
+function preprocess_data(data, blocksize::Int, tok2idx::Dict{Char,Int64})
     n = length(data)
     n = n - n % blocksize
     return data[1:n]
@@ -45,10 +47,6 @@ end
 # and then remove the newlines from the output
 function generate_text(model, seq::Vector{Int}, blocksize::Int, n::Int)
     generated = copy(seq)
-    m = blocksize - length(generated)
-    if length(generated) < blocksize
-        generated = vcat(encode(repeat('\n', m)), generated)
-    end
     for _ in 1:n
         context_size = min(length(generated), blocksize)
         context = reshape(generated[max(size(generated, 1) - blocksize + 1, 1):end], (context_size, 1))
@@ -57,7 +55,7 @@ function generate_text(model, seq::Vector{Int}, blocksize::Int, n::Int)
         idx = StatsBase.sample(1:length(output), ProbabilityWeights(output))
         generated = vcat(generated, idx)
     end
-    length(generated) < blocksize ? generated[end-blocksize+1:end] : generated
+    generated
 end
 generate_text(model, seq::String, blocksize::Int; n::Int = 1) =
     generate_text(model, encode(seq), blocksize, n)

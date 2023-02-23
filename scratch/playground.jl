@@ -1,6 +1,5 @@
 using Flux
 using TransformerCircuits
-using StatsBase
 using Plots
 
 include("utils.jl")
@@ -8,12 +7,23 @@ include("utils.jl")
 # Form the dataset
 text = read("data/input.txt", String)
 chars = Set(text)
+
+# add special tokens
+# available - @, #
+# start_token = '@'
+# stop_token = '#'
+
 vocabsize = length(chars)
 tok2idx = Dict(c => i for (i, c) in enumerate(chars))
 idx2tok = Dict(i => c for (i, c) in enumerate(chars))
 
 encode(text) = [tok2idx[c] for c in text]
 decode(encoded_text) = [idx2tok[i] for i in encoded_text]
+
+# constants
+batchsize = 128
+blocksize = 512
+vocabsize = length(tok2idx)
 
 encoded_text = encode(text)
 split_idx = Int(round(length(encoded_text) * 0.9))
@@ -23,10 +33,6 @@ val_data = encoded_text[split_idx+1:end]
 # Might not need this if we use padding
 train_data = cutoff_data(train_data, blocksize)
 val_data = cutoff_data(val_data, blocksize)
-
-batchsize = 128
-blocksize = 512
-vocabsize = length(tok2idx)
 
 X, Y = generate_batch(train_data, length(train_data) ÷ blocksize, blocksize, vocabsize)
 train_data = Flux.DataLoader((X, Y); batchsize)
@@ -83,7 +89,7 @@ train_loss = estimate_loss(ngram_model, train_data, evaliters = 100)
 val_loss = estimate_loss(ngram_model, val_data, evaliters = 100)
 @info "" val_loss
 
-circ = TransformerCircuits.Circuit(vocabsize, blocksize, 128; nheads = 8);
+circ = Circuit(vocabsize, blocksize, 128; nheads = 8);
 opt = Flux.setup(AdamW(5e-4), circ);
 train_model!(circ, train_data, opt; nepochs = 10)
 train_loss = estimate_loss(circ, train_data, evaliters = 50)
@@ -120,7 +126,7 @@ val_loss = estimate_loss(circ, val_data, evaliters = 50)
 # julia> val_loss = estimate_loss(circ, val_data, evaliters = 50)
 # 1.876984875202179
 
-circ2 = TransformerCircuits.Circuit(vocabsize, blocksize, 128; nheads = 16);
+circ2 = Circuit(vocabsize, blocksize, 128; nheads = 16);
 
 # TODOS:
 # - implement larger context
