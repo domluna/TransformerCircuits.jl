@@ -49,7 +49,11 @@ function (sa::SelfAttention)(query::A3{T}, key::A3{T}, value::A3{T}) where {T}
     # (dembed, sequence_length, batch_size)
     # TODO: If the context length is known this can be static
     M = make_causal_mask(q)
+
+    # the size of the attention matrix is (context_length, context_length, nheads, batch_size)
     x, _ = dot_product_attention(q, k, v; mask = M, nheads = sa.nheads, fdrop = sa.drop)
+    # x, attn = dot_product_attention(q, k, v; mask = M, nheads = sa.nheads, fdrop = sa.drop)
+    # @info "" size(attn) size(x) attn[:, :, 1, 1]
 
     x = sa.drop(sa.O(x))
     return x
