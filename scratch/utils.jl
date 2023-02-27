@@ -33,7 +33,7 @@ end
 function train_model!(model, data::Flux.Data.DataLoader, optim; nepochs::Int = 10)
     for _ in 1:nepochs
         Flux.train!(
-            (m, x, y) -> (loss = Flux.Losses.crossentropy(m(x), y); loss),
+            (m, x, y) -> (loss = Flux.Losses.crossentropy(softmax(m(x), dims = 1), y); loss),
             model,
             train_data,
             optim,
@@ -45,22 +45,23 @@ end
 # given an initial sequence, generate a sequence of length n
 # If the sequence is shorter than the blocksize, we pad it with newlines (prepend)
 # and then remove the newlines from the output
-function generate_text(model, seq::Vector{Int}, blocksize::Int, n::Int)
+function generate_text(model, seq::Vector{Int}, blocksize::Int, n::Int, temperature::Float64)
     generated = copy(seq)
     for _ in 1:n
         context_size = min(length(generated), blocksize)
         context = reshape(generated[max(size(generated, 1) - blocksize + 1, 1):end], (context_size, 1))
         y = model(context)
-        output = y[:, end, end]
+        T = eltype(y)
+        output = y[:, end, end] ./ T(temperature)
         idx = StatsBase.sample(1:length(output), ProbabilityWeights(output))
         generated = vcat(generated, idx)
     end
     generated
 end
-generate_text(model, seq::String, blocksize::Int; n::Int = 1) =
-    generate_text(model, encode(seq), blocksize, n)
-generate_text(model, char::Char, blocksize::Int; n::Int = 1) =
-    generate_text(model, encode(string(char)), blocksize, n)
+generate_text(model, seq::String, blocksize::Int; n::Int = 1, temperature = 1.0) =
+    generate_text(model, encode(seq), blocksize, n, temperature)
+generate_text(model, char::Char, blocksize::Int; n::Int = 1, temperature = 1.0) =
+    generate_text(model, encode(string(char)), blocksize, n, temperature)
 
 function generate_text(model::Matrix{Float64}, seq::Vector{Int}, n::Int)
     generated = copy(seq)
