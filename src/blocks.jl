@@ -54,9 +54,9 @@ end
 Flux.@functor GPT
 
 function GPT(
-    context_size::Int,
+    blocksize::Int,
+    vocabsize::Int,
     ;
-    vocab_size::Int = 50257,
     nheads::Int = 4,
     dembed::Int = 128,
     dff::Int = dembed * 4,
@@ -64,13 +64,16 @@ function GPT(
     dropout_prob = 0.1,
     nlayers::Int = 4,
 )
+    if vocabsize % 64 != 0
+        vocabsize = vocabsize + 64 - vocabsize % 64
+    end
     GPT(
-        Flux.Embedding(vocab_size, dembed),
-        Flux.Embedding(context_size, dembed),
+        Flux.Embedding(vocabsize, dembed),
+        Flux.Embedding(blocksize, dembed),
         Dropout(dropout_prob),
         Flux.Chain([Block(dembed, dff; nheads, dropout_prob, dff_activation) for _ in 1:nlayers]...),
         LayerNorm(dembed),
-        Dense(dembed, vocab_size),
+        Dense(dembed, vocabsize),
     )
 end
 

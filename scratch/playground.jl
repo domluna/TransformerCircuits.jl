@@ -14,6 +14,10 @@ chars = Set(text)
 # stop_token = '#'
 
 vocabsize = length(chars)
+# powers of 64
+if vocabsize % 64 != 0
+    vocabsize = vocabsize + 64 - vocabsize % 64
+end
 tok2idx = Dict(c => i for (i, c) in enumerate(chars))
 idx2tok = Dict(i => c for (i, c) in enumerate(chars))
 
