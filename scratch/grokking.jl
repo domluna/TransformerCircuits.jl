@@ -23,11 +23,7 @@ alphabet = string.(vcat('a':'z', 'A':'Z', Char.(1024:2048)))
 num2tok = Dict(i - 1 => c for (i, c) in enumerate(alphabet))
 tok2num = Dict(values(num2tok) .=> keys(num2tok))
 
-function create_dataset_binop_with_mod(
-    op::Function,
-    modn::Int,
-    datasetsize::Int = 1024,
-)
+function create_dataset_binop_with_mod(op::Function, modn::Int, datasetsize::Int = 1024)
     toks = alphabet[1:modn+1]
     push!(toks, string(Symbol(op)))
     push!(toks, "=")

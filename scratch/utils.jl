@@ -24,21 +24,39 @@ function estimate_loss(model, data::Flux.Data.DataLoader; evaliters::Int = 100)
     D = collect(data)
     for _ in 1:evaliters
         x, y = rand(D)
-        ŷ = softmax(model(x), dims=1)
+        ŷ = softmax(model(x), dims = 1)
         loss += Flux.Losses.crossentropy(ŷ, y)
     end
     return loss / evaliters
 end
 
-function train_model!(model, data::Flux.Data.DataLoader, optim; nepochs::Int = 10, evaliters::Int=10)
+function estimate_accuracy(model, x, y)
+    ŷ = softmax(model(x), dims = 1)
+    return mean(argmax(ŷ, dims = 1) .== argmax(y, dims = 1))
+end
+
+function train_model!(
+    model,
+    traindata::Flux.Data.DataLoader,
+    optim;
+    nepochs::Int = 10,
+    evaliters::Int = 10,
+    evalevery::Int = 1,
+    valdata::Union{Nothing,Flux.Data.DataLoader} = nothing,
+)
     for i in 1:nepochs
         Flux.train!(
             (m, x, y) -> (loss = Flux.Losses.crossentropy(softmax(m(x), dims = 1), y); loss),
             model,
-            data,
+            traindata,
             optim,
         )
-        @info "Training loss" iter=i estimate_loss(model, data; evaliters)
+        if i % evalevery == 0
+            @info "Training loss" iter = i estimate_loss(model, traindata; evaliters)
+            if valdata !== nothing
+                @info "Validation loss" iter = i estimate_loss(model, valdata; evaliters)
+            end
+        end
     end
 end
 
