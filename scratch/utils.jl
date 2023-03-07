@@ -41,7 +41,7 @@ function train_model!(
     optim;
     nepochs::Int = 10,
     evaliters::Int = 10,
-    evalevery::Int = 1,
+    evalevery::Int =1,
     valdata::Union{Nothing,Flux.Data.DataLoader} = nothing,
 )
     for i in 1:nepochs
