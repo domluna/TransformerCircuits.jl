@@ -1,33 +1,21 @@
 # self attention is unidirectional so the mask is just a lower triangular matrix
-struct SelfAttention
-    K::Dense
-    Q::Dense
-    V::Dense
-    O::Dense
-
-    drop::Dropout
-    # TODO: remove this unless we know the context length
-    mask::Any
-
-    dhead::Int
+struct SelfAttention{T1,D,T2}
+    K::T1
+    Q::T1
+    V::T1
+    O::T2
+    drop::D
     nheads::Int
 end
 Flux.@functor SelfAttention (K, Q, V, O)
 
-function SelfAttention(
-    nheads::Int,
-    dembed::Int;
-    mask = nothing,
-    dropout_prob = 0.1,
-    doutput::Int = dembed,
-)
+function SelfAttention(nheads::Int, dembed::Int; dropout_prob = 0.1, doutput::Int = dembed)
     @assert dembed % nheads == 0 "dimension of model, $dembed must be divisible by number of heads: $nheads"
-    dhead = dembed ÷ nheads
     K = Dense(dembed => dembed, bias = false)
     V = Dense(dembed => dembed, bias = false)
     Q = Dense(dembed => dembed, bias = false)
     O = Dense(dembed => doutput, bias = false)
-    return SelfAttention(K, Q, V, O, Dropout(dropout_prob), mask, dhead, nheads)
+    return SelfAttention(K, Q, V, O, Dropout(dropout_prob), nheads)
 end
 
 # query, key, value dimensions are (dembed, sequence_length, batch_size)
