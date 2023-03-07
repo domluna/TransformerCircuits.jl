@@ -4,6 +4,19 @@ using Plots
 
 include("utils.jl")
 
+function standard_bigram_model(text::String, tok2idx::Dict{Char,Int})
+    vocabsize = length(tok2idx)
+    m = zeros(Int, vocabsize, vocabsize)
+
+    for i in 1:length(text)-1
+        # access by column
+        m[tok2idx[text[i+1]], tok2idx[text[i]]] += 1
+    end
+
+    m = m ./ sum(m, dims = 1)
+    return m
+end
+
 # Form the dataset
 text = read("data/input.txt", String)
 chars = Set(text)
@@ -14,10 +27,6 @@ chars = Set(text)
 # stop_token = '#'
 
 vocabsize = length(chars)
-# powers of 64
-if vocabsize % 64 != 0
-    vocabsize = vocabsize + 64 - vocabsize % 64
-end
 tok2idx = Dict(c => i for (i, c) in enumerate(chars))
 idx2tok = Dict(i => c for (i, c) in enumerate(chars))
 
@@ -42,6 +51,19 @@ X, Y = generate_batch(train_data, length(train_data) ÷ blocksize, blocksize, vo
 train_data = Flux.DataLoader((X, Y); batchsize)
 X, Y = generate_batch(val_data, length(val_data) ÷ blocksize, blocksize, vocabsize)
 val_data = Flux.DataLoader((X, Y); batchsize)
+
+function standard_bigram_model(text::String, tok2idx::Dict{Char,Int})
+    vocabsize = length(tok2idx)
+    m = zeros(Int, vocabsize, vocabsize)
+
+    for i in 1:length(text)-1
+        # access by column
+        m[tok2idx[text[i+1]], tok2idx[text[i]]] += 1
+    end
+
+    m = m ./ sum(m, dims = 1)
+    return m
+end
 
 M = standard_bigram_model(text, tok2idx)
 
@@ -134,7 +156,7 @@ circ2 = Circuit(vocabsize, blocksize, 128; nheads = 16);
 
 # TODOS:
 # - implement larger context
-# - add <START> <END> tokens
+# - add <START> <END> tokens (required?)
 # measure 500th - 50th token loss
 # [a][b][a][b]....[a] -> [b]
 # [a*][b*][a*][b*]....[a] -> [b] ... what would b be?

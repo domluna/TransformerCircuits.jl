@@ -26,13 +26,12 @@ function Block(
     dff::Int = dembed * 4,
     kwargs...,
 )
-    Block(SelfAttention(nheads, dembed), FFN(dembed, dff; dff_activation, kwargs...))
-end
-
-function Block(attn::SelfAttention, ffn)
-    ln1 = LayerNorm(size(attn.O.weight, 1))
-    ln2 = LayerNorm(size(ffn.proj.weight, 1))
-    Block(attn, ffn, ln1, ln2)
+    Block(
+        SelfAttention(nheads, dembed),
+        FFN(dembed, dff; dff_activation, kwargs...),
+        LayerNorm(dembed),
+        LayerNorm(dembed),
+    )
 end
 
 function (b::Block)(x::AbstractArray{T}) where {T}
@@ -64,9 +63,8 @@ function GPT(
     dropout_prob = 0.1,
     nlayers::Int = 4,
 )
-    if vocabsize % 64 != 0
-        vocabsize = vocabsize + 64 - vocabsize % 64
-    end
+    vocabsize = roundto64(vocabsize)
+    blocksize = roundto64(blocksize)
     GPT(
         Flux.Embedding(vocabsize, dembed),
         Flux.Embedding(blocksize, dembed),

@@ -24,21 +24,21 @@ function estimate_loss(model, data::Flux.Data.DataLoader; evaliters::Int = 100)
     D = collect(data)
     for _ in 1:evaliters
         x, y = rand(D)
-        ŷ = model(x)
+        ŷ = softmax(model(x), dims=1)
         loss += Flux.Losses.crossentropy(ŷ, y)
     end
     return loss / evaliters
 end
 
-function train_model!(model, data::Flux.Data.DataLoader, optim; nepochs::Int = 10)
-    for _ in 1:nepochs
+function train_model!(model, data::Flux.Data.DataLoader, optim; nepochs::Int = 10, evaliters::Int=10)
+    for i in 1:nepochs
         Flux.train!(
             (m, x, y) -> (loss = Flux.Losses.crossentropy(softmax(m(x), dims = 1), y); loss),
             model,
-            train_data,
+            data,
             optim,
         )
-        @info "Training loss" estimate_loss(model, train_data, evaliters = 30)
+        @info "Training loss" iter=i estimate_loss(model, data; evaliters)
     end
 end
 
@@ -72,17 +72,4 @@ function generate_text(model::Matrix{Float64}, seq::Vector{Int}, n::Int)
         generated = vcat(generated, idx)
     end
     return generated
-end
-
-function standard_bigram_model(text::String, tok2idx::Dict{Char,Int})
-    vocabsize = length(tok2idx)
-    m = zeros(Int, vocabsize, vocabsize)
-
-    for i in 1:length(text)-1
-        # access by column
-        m[tok2idx[text[i+1]], tok2idx[text[i]]] += 1
-    end
-
-    m = m ./ sum(m, dims = 1)
-    return m
 end
