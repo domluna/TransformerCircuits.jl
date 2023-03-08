@@ -68,13 +68,47 @@ valdata = Flux.DataLoader((valX, valY), batchsize = size(valX, 2))
 
 vocabsize = size(trainY, 1)
 blocksize = size(trainX, 1)
+# paper used 128 for embedding size and 4 heads
 dembed = 128
-circ = Circuit(vocabsize, blocksize, dembed; nheads = 4);
+nheads = 4
+circ = Circuit(vocabsize, blocksize, dembed; nheads);
 opt = Flux.setup(AdamW(1e-3), circ);
 
-train_model!(circ, traindata, opt; nepochs = 10, evaliters = 1)
-# it's a single batch size so 1 evaliter is the entire dataset
-train_loss = estimate_loss(circ, traindata, evaliters = 1)
-@info "Training loss" train_loss
-val_loss = estimate_loss(circ, valdata, evaliters = 1)
-@info "Validation loss" val_loss
+# train_model!(circ, traindata, opt; nepochs = 10, evaliters = 1)
+train_model!(
+    circ,
+    traindata,
+    opt;
+    nepochs = 100_000,
+    evaliters = 1,
+    evalevery = 1000,
+    valdata = valdata,
+)
+
+function decode(x::Vector{Int})
+    s = ""
+    for i in 1:size(x, 1)
+        tok = idx2tok[x[i]]
+        if get(tok2num, tok, nothing) !== nothing
+            s *= "$(tok2num[tok])"
+        else
+            s *= tok
+        end
+    end
+    return s
+end
+
+function decode(model, x::Matrix{Int})
+    o = Flux.onecold(model(x), 1:vocabsize)
+    outputs = String[]
+    for i in 1:size(o, 2)
+        push!(outputs, decode(vcat(x[:, i], o[end, i])))
+    end
+    return outputs
+end
+
+function grokking_accuracy(pred, truth)
+    v1 = Flux.onecold(pred, 1:vocabsize)[end, :]
+    v2 = Flux.onecold(truth, 1:vocabsize)[end, :]
+    return mean(v1 .== v2)
+end
