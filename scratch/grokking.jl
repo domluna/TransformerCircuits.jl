@@ -27,7 +27,6 @@ function create_dataset_binop_with_mod(op::Function, modn::Int, datasetsize::Int
     toks = alphabet[1:modn+1]
     push!(toks, string(Symbol(op)))
     push!(toks, "=")
-    push!(toks, " ")
     tok2idx = Dict(c => i for (i, c) in enumerate(toks))
     idx2tok = Dict(i => c for (i, c) in enumerate(toks))
 

@@ -1,3 +1,12 @@
 # TransformerCircuits
 
-Exercises for https://transformer-circuits.pub/2021/exercises/index.html
+Learning about transformers through small experiments.
+
+Sources:
+
+- https://transformer-circuits.pub/
+- Grokking Paper
+
+## Motivation
+
+
