@@ -1,3 +1,9 @@
+# Experimenting with n-gram models
+# The bigram model learns the probability of a character given the previous character
+# and approximates the ideal model which can be calculated by counting the number of times
+# a character transition to another character and dividing by the total number of times it transitions.
+#
+# Once you add more layers the model begins to use more context.
 using Flux
 using TransformerCircuits
 using Plots
