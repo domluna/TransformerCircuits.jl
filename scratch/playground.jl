@@ -27,7 +27,7 @@ end
 text = read("data/input.txt", String)
 chars = Set(text)
 
-# add special tokens
+# TODO: add special tokens ???
 # available - @, #
 # start_token = '@'
 # stop_token = '#'
