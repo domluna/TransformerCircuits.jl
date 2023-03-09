@@ -1,6 +1,6 @@
 # 0 layer
-struct Bigram
-    embed::Flux.Embedding
+struct Bigram{E}
+    embed::E
 end
 Flux.@functor Bigram
 

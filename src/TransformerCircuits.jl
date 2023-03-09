@@ -4,7 +4,7 @@ export SelfAttention, FFN, Block, GPT, Circuit
 
 using Flux
 
-const A3{T} = AbstractArray{T,3} where {T<:Union{Float32,Float16}}
+const A3{T} = Array{T,3} where {T<:Union{Float32,Float16}}
 
 # https://transformer-circuits.pub/2022/solu
 solu(x) = x .* softmax(x)

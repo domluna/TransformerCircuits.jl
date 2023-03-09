@@ -35,6 +35,7 @@ function Block(
 end
 
 function (b::Block)(x::A3{T}) where {T}
+    o = Array{T}(undef, size(x))
     x = x + b.attn(b.ln1(x))
     x = x + b.ffn(b.ln2(x))
     return x
