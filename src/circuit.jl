@@ -1,8 +1,8 @@
-struct Circuit
-    token_embed::Flux.Embedding
-    position_embed::Flux.Embedding
-    blocks::Flux.Chain
-    outtoken::Flux.Dense
+struct Circuit{E,B,O}
+    token_embed::E
+    position_embed::E
+    blocks::B
+    outtoken::O
 end
 Flux.@functor Circuit
 

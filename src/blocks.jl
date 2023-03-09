@@ -11,11 +11,11 @@ function FFN(dembed::Int, dff::Int; dropout_prob = 0.1, dff_activation = gelu)
     Chain(layers...)
 end
 
-struct Block{A,F}
+struct Block{A,F,L}
     attn::A
     ffn::F
-    ln1::LayerNorm
-    ln2::LayerNorm
+    ln1::L
+    ln2::L
 end
 Flux.@functor Block
 
@@ -34,21 +34,21 @@ function Block(
     )
 end
 
-function (b::Block)(x::AbstractArray{T}) where {T}
+function (b::Block)(x::A3{T}) where {T}
     x = x + b.attn(b.ln1(x))
     x = x + b.ffn(b.ln2(x))
     return x
 end
 
-struct GPT
-    token_embedding::Flux.Embedding
-    position_embedding::Flux.Embedding
+struct GPT{E,D,B,L,O}
+    token_embedding::E
+    position_embedding::E
 
-    drop::Dropout
-    encoder::Chain
+    drop::D
+    encoder::B
 
-    ln::LayerNorm
-    decoder::Dense
+    ln::L
+    decoder::O
 end
 Flux.@functor GPT
 
@@ -63,8 +63,6 @@ function GPT(
     dropout_prob = 0.1,
     nlayers::Int = 4,
 )
-    vocabsize = roundto64(vocabsize)
-    blocksize = roundto64(blocksize)
     GPT(
         Flux.Embedding(vocabsize, dembed),
         Flux.Embedding(blocksize, dembed),
