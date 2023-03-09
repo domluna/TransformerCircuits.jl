@@ -84,6 +84,7 @@ Plots.heatmap(
     ytickfont = font(10),
 )
 
+bigram_model = BiGram(vocabsize);
 # same because context size doesn't matter
 o1 = bigram_model(reshape(encode(sorted_chars), (1, :)))
 o2 = bigram_model(reshape(encode(sorted_chars), (:, 1)))
@@ -167,4 +168,4 @@ circ2 = Circuit(vocabsize, blocksize, 128; nheads = 16);
 # the most probable character in the bigram sense is clearly not the most probable character in the
 # context sense.
 
-join(decode(generate_text(circ2, s, n = 50)), "") |> print
+join(decode(generate_text(circ2, s, 50)), "") |> print

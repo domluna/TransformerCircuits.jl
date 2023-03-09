@@ -1,13 +1,14 @@
 # 0 layer
-struct Bigram{E}
+struct BiGram{E}
     embed::E
 end
-Flux.@functor Bigram
+Flux.@functor BiGram
 
-Bigram(size::Int) = Bigram(Flux.Embedding(size, size))
+BiGram(size::Int) = BiGram(Flux.Embedding(size, size))
 
-function (b::Bigram)(x::Matrix{Int64})
+function (b::BiGram)(x::Matrix{Int64})
     x = b.embed(x)
     x = softmax(x, dims = 1)
     return x
 end
+(b::BiGram)(x::Vector{Int64}) = b(reshape(x, :, 1))

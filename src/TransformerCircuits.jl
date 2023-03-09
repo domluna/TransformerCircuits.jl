@@ -1,6 +1,6 @@
 module TransformerCircuits
 
-export Circuit
+export Circuit, BiGram
 
 using Flux
 
