@@ -107,7 +107,7 @@ Plots.heatmap(
 # all previous context is used
 # self attention seems to allow the context to communicate
 
-ngram_model = NGram(vocabsize, blocksize, 32; nheads = 4);
+ngram_model = Circuit(vocabsize, blocksize, 32; nheads = 4);
 ngram_optim = Flux.setup(AdamW(), ngram_model);
 train_model!(ngram_model, train_data, ngram_optim; nepochs = 10)
 train_loss = estimate_loss(ngram_model, train_data, evaliters = 100)

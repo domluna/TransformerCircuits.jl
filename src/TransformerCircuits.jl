@@ -1,6 +1,6 @@
 module TransformerCircuits
 
-export SelfAttention, FFN, Block, GPT, Circuit
+export Circuit
 
 using Flux
 
@@ -12,8 +12,7 @@ roundto64(x) = x % 64 != 0 ? x + 64 - x % 64 : x
 
 include("attention.jl")
 include("blocks.jl")
-# include("bigram.jl")
-# include("ngram.jl")
+include("bigram.jl")
 include("circuit.jl")
 
 end
