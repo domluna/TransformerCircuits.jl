@@ -54,37 +54,6 @@ function create_dataset_binop_with_mod(op::Function, modn::Int, datasetsize::Int
     return (X, Flux.onehotbatch(Y, 1:length(tok2idx))), tok2idx, idx2tok
 end
 
-modn = 33
-data, tok2idx, idx2tok = create_dataset_binop_with_mod(+, modn)
-
-# split the dataset and shuffle it
-X, Y = data
-n = Int(round(size(X, 2) * 0.5))
-trainX, trainY = X[:, 1:n], Y[:, :, 1:n]
-valX, valY = X[:, n+1:end], Y[:, :, n+1:end]
-
-traindata = Flux.DataLoader((trainX, trainY), batchsize = size(trainX, 2))
-valdata = Flux.DataLoader((valX, valY), batchsize = size(valX, 2))
-
-vocabsize = size(trainY, 1)
-blocksize = size(trainX, 1)
-# paper used 128 for embedding size and 4 heads
-dembed = 128
-nheads = 4
-circ = Circuit(vocabsize, blocksize, dembed; nheads);
-opt = Flux.setup(AdamW(1e-3), circ);
-
-# train_model!(circ, traindata, opt; nepochs = 10, evaliters = 1)
-train_model!(
-    circ,
-    traindata,
-    opt;
-    nepochs = 100_000,
-    evaliters = 1,
-    evalevery = 1000,
-    valdata = valdata,
-)
-
 function decode(x::Vector{Int})
     s = ""
     for i in 1:size(x, 1)
@@ -112,3 +81,39 @@ function grokking_accuracy(pred, truth)
     v2 = Flux.onecold(truth, 1:vocabsize)[end, :]
     return mean(v1 .== v2)
 end
+
+modn = 33
+data, tok2idx, idx2tok = create_dataset_binop_with_mod(+, modn)
+
+# split the dataset and shuffle it
+X, Y = data
+n = Int(round(size(X, 2) * 0.5))
+trainX, trainY = X[:, 1:n], Y[:, :, 1:n]
+valX, valY = X[:, n+1:end], Y[:, :, n+1:end]
+
+traindata = Flux.DataLoader((trainX, trainY), batchsize = size(trainX, 2))
+valdata = Flux.DataLoader((valX, valY), batchsize = size(valX, 2))
+
+vocabsize = size(trainY, 1)
+blocksize = size(trainX, 1)
+# paper used 128 for embedding size and 4 heads
+dembed = 128
+nheads = 4
+circ = Circuit(vocabsize, blocksize, dembed; nheads);
+opt = Flux.setup(AdamW(1e-3), circ);
+
+# train_model!(circ, traindata, opt; nepochs = 10, evaliters = 1)
+# This gets to 100% on the train set quickly but then on the validation set highest I've got is 65% or so
+# after 150k epochs, which is quite a bit less than the 10^6 in some of the experiments. I'm not on a GPU
+# right now so the iterations take much longer.
+# Revisit this when I have access to my desktop again.
+
+# train_model!(
+#     circ,
+#     traindata,
+#     opt;
+#     nepochs = 100_000,
+#     evaliters = 1,
+#     evalevery = 1000,
+#     valdata = valdata,
+# )
