@@ -21,7 +21,7 @@ Flux.@functor BiGramWithPosition
 BiGramWithPosition(vocabsize::Int, contextsize::Int) =
     BiGramWithPosition(Flux.Embedding(vocabsize, vocabsize), Flux.Embedding(contextsize, vocabsize))
 
-function (b::BiGramWithPosition)(x::Matrix{Int64}, idx::Int=size(x, 1))
+function (b::BiGramWithPosition)(x::Matrix{Int64}, idx::Int = size(x, 1))
     tokemb = b.token_embed(x)
     posemb = b.position_embed(1:idx)
     return tokemb .+ posemb
