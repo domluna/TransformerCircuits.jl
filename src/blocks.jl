@@ -1,14 +1,22 @@
+struct FFN{D1,D2,D}
+    dense1::D1
+    dense2::D2
+    drop::D
+end
+Flux.@functor FFN
+
 function FFN(dembed::Int, dff::Int; dropout_prob = 0.1, dff_activation = gelu)
-    if dff_activation == solu
-        layers = Any[Dense(dembed, dff, bias = false)]
-        push!(layers, solu)
-        push!(layers, LayerNorm(dff))
-    else
-        layers = Any[Dense(dembed, dff, dff_activation, bias = false)]
-    end
-    push!(layers, Dense(dff, dembed, bias = false))
-    push!(layers, Dropout(dropout_prob))
-    Chain(layers...)
+    FFN(
+        Dense(dembed, dff, dff_activation, bias = false),
+        Dense(dff, dembed, bias = false),
+        Dropout(Float32(dropout_prob)),
+    )
+end
+
+function (f::FFN)(x::A3{T}) where {T}
+    # o = Array{T}(undef, size(x))
+    return f.drop(f.dense2(f.dense1(x)))
+    return x
 end
 
 struct Block{A,F,L}
@@ -35,7 +43,7 @@ function Block(
 end
 
 function (b::Block)(x::A3{T}) where {T}
-    o = Array{T}(undef, size(x))
+    # o = Array{T}(undef, size(x))
     x = x + b.attn(b.ln1(x))
     x = x + b.ffn(b.ln2(x))
     return x
@@ -67,7 +75,7 @@ function GPT(
     GPT(
         Flux.Embedding(vocabsize, dembed),
         Flux.Embedding(blocksize, dembed),
-        Dropout(dropout_prob),
+        Dropout(Float32(dropout_prob)),
         Flux.Chain([Block(dembed, dff; nheads, dropout_prob, dff_activation) for _ in 1:nlayers]...),
         LayerNorm(dembed),
         Dense(dembed, vocabsize),

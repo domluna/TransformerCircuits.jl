@@ -36,7 +36,7 @@ function create_dataset_binop_with_mod(op::Function, modn::Int, datasetsize::Int
         a = rand(0:modn)
         b = rand(0:modn)
         c = (op(a, b)) % modn
-        s = "$(num2tok[a]) $op $(num2tok[b]) = $(num2tok[c])"
+        s = "$(num2tok[a])$op$(num2tok[b])=$(num2tok[c])"
         # encode
         enc = [tok2idx[string(c)] for c in s]
         push!(xs, enc[1:end-1])

@@ -1,13 +1,14 @@
 # self attention is unidirectional so the mask is just a lower triangular matrix
-struct SelfAttention{T1,D,T2}
+struct SelfAttention{T1,T2,D}
     K::T1
     Q::T1
     V::T1
     O::T2
-    drop::D
+    attndrop::D
+    outdrop::D
     nheads::Int
 end
-Flux.@functor SelfAttention (K, Q, V, O)
+Flux.@functor SelfAttention (K, Q, V, O, attndrop, outdrop)
 
 function SelfAttention(nheads::Int, dembed::Int; dropout_prob = 0.1, doutput::Int = dembed)
     @assert dembed % nheads == 0 "dimension of model, $dembed must be divisible by number of heads: $nheads"
@@ -15,12 +16,19 @@ function SelfAttention(nheads::Int, dembed::Int; dropout_prob = 0.1, doutput::In
     V = Dense(dembed => dembed, bias = false)
     Q = Dense(dembed => dembed, bias = false)
     O = Dense(dembed => doutput, bias = false)
-    return SelfAttention(K, Q, V, O, Dropout(dropout_prob), nheads)
+    return SelfAttention(
+        K,
+        Q,
+        V,
+        O,
+        Dropout(Float32(dropout_prob)),
+        Dropout(Float32(dropout_prob)),
+        nheads,
+    )
 end
 
 # query, key, value dimensions are (dembed, sequence_length, batch_size)
 function (sa::SelfAttention)(query::A3{T}, key::A3{T}, value::A3{T}) where {T}
-    sa.drop.p
     # (dembed, sequence_length, batch_size)
     q = sa.Q(query)
     k = sa.K(key)
@@ -39,11 +47,11 @@ function (sa::SelfAttention)(query::A3{T}, key::A3{T}, value::A3{T}) where {T}
     M = make_causal_mask(q)
 
     # the size of the attention matrix is (context_length, context_length, nheads, batch_size)
-    x, _ = dot_product_attention(q, k, v; mask = M, nheads = sa.nheads, fdrop = sa.drop)
+    x, _ = dot_product_attention(q, k, v; mask = M, nheads = sa.nheads, fdrop = sa.attndrop)
     # x, attn = dot_product_attention(q, k, v; mask = M, nheads = sa.nheads, fdrop = sa.drop)
     # @info "" size(attn) size(x) attn[:, :, 1, 1]
 
-    x = sa.drop(sa.O(x))
+    x = sa.outdrop(sa.O(x))
     return x
 end
 
