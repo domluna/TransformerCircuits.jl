@@ -1,3 +1,20 @@
+# Note 1:
+#
+# This gets to 100% on the train set quickly but then on the validation set highest I've got is 65% or so
+# after 150k epochs, which is quite a bit less than the 10^6 in some of the experiments. I'm not on a GPU
+# right now so the iterations take much longer.
+# Revisit this when I have access to my desktop again.
+#
+# Note 2:
+#
+# After adding "% modn" to the string the model gets to 75% accuracy on the last token. It gets to 100% on the
+# train set super quick.
+#
+# Interestingly enough the validation curve is pretty different from what's reported in the paper. It consistently
+# goes up but the climb just becomes slower and slower rather than it being flat for a long period and then shooting up
+# like a rocket.
+#
+# Should the loss be only the last token ???
 using TransformerCircuits
 using Flux
 using Random
@@ -118,10 +135,6 @@ circ = circ |> gpu
 opt = Flux.setup(AdamW(1e-3), circ);
 
 # train_model!(circ, opt, traindata; nepochs = 10, evaliters = 1)
-# This gets to 100% on the train set quickly but then on the validation set highest I've got is 65% or so
-# after 150k epochs, which is quite a bit less than the 10^6 in some of the experiments. I'm not on a GPU
-# right now so the iterations take much longer.
-# Revisit this when I have access to my desktop again.
 
 train_model!(
     circ,
