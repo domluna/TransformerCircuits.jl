@@ -83,7 +83,7 @@ function train_model!(
     nepochs::Int = 10,
     evalevery::Int = 1,
     evaliters::Int = 10,
-    use_last_token_accuracy::Bool = false,
+    only_last_token::Bool = false,
     run::Union{Nothing,Run} = nothing,
     early_stop::Union{Nothing,Function} = nothing,
 )
@@ -100,18 +100,18 @@ function train_model!(
         )
         if epoch % evalevery == 0
             train_loss = estimate_loss(model, traindata; evaliters)
-            train_acc = estimate_accuracy(model, traindata; last_token = use_last_token_accuracy)
+            train_acc = estimate_accuracy(model, traindata; last_token = only_last_token)
             add_train_eval!(run, train_loss, train_acc)
             val_loss::Union{Float64,Nothing} = nothing
             val_acc::Union{Float64,Nothing} = nothing
             if valdata !== nothing
                 val_loss = estimate_loss(model, valdata; evaliters)
-                val_acc = estimate_accuracy(model, valdata; last_token = use_last_token_accuracy)
+                val_acc = estimate_accuracy(model, valdata; last_token = only_last_token)
             end
             add_val_eval!(run, val_loss, val_acc)
             @info "Evaluation" epoch train_loss train_acc val_loss val_acc
             if early_stop !== nothing
-                if early_stop(run)
+                if early_stop()
                     break
                 end
             end
