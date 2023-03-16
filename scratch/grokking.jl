@@ -1,5 +1,6 @@
 using TransformerCircuits
 using Flux
+using Random
 
 include("utils.jl")
 
@@ -23,32 +24,32 @@ alphabet = string.(vcat('a':'z', 'A':'Z', Char.(1024:2048)))
 num2tok = Dict(i - 1 => c for (i, c) in enumerate(alphabet))
 tok2num = Dict(values(num2tok) .=> keys(num2tok))
 
-function create_dataset_binop_with_mod(op::Function, modn::Int, datasetsize::Int = 1024)
+function create_dataset_binop_with_mod(op::Function, modn::Int)
     toks = alphabet[1:modn+1]
     push!(toks, string(Symbol(op)))
     push!(toks, "=")
+    push!(toks, " ")
+    push!(toks, "%")
     tok2idx = Dict(c => i for (i, c) in enumerate(toks))
     idx2tok = Dict(i => c for (i, c) in enumerate(toks))
 
-    xs = Vector{Int}[]
-    ys = Vector{Int}[]
-    for _ in 1:datasetsize
-        a = rand(0:modn)
-        b = rand(0:modn)
-        c = (op(a, b)) % modn
-        s = "$(num2tok[a])$op$(num2tok[b])=$(num2tok[c])"
-        # encode
-        enc = [tok2idx[string(c)] for c in s]
-        push!(xs, enc[1:end-1])
-        push!(ys, enc[2:end])
+    data = Vector{Int}[]
+    for a in 0:modn
+        for b in 0:modn
+            c = (op(a, b)) % modn
+            s = "$(num2tok[a]) $op $(num2tok[b]) % $(num2tok[modn]) = $(num2tok[c])"
+            # encode
+            enc = [tok2idx[string(c)] for c in s]
+            push!(data, enc)
+        end
     end
+    Random.shuffle!(data)
 
-    # TODO: matrix
-    X = zeros(Int, (length(xs[1]), datasetsize))
-    Y = zeros(Int, (length(ys[1]), datasetsize))
-    for i in 1:datasetsize
-        X[:, i] = xs[i]
-        Y[:, i] = ys[i]
+    X = zeros(Int, (length(data[1]) - 1, length(data)))
+    Y = zeros(Int, (length(data[1]) - 1, length(data)))
+    for (i, enc) in enumerate(data)
+        X[:, i] = enc[1:end-1]
+        Y[:, i] = enc[2:end]
     end
     return (X, Flux.onehotbatch(Y, 1:length(tok2idx))), tok2idx, idx2tok
 end
@@ -66,7 +67,7 @@ function decode(x::Vector{Int})
     return s
 end
 
-function decode(model, x::Matrix{Int})
+function decode(model, x::AbstractMatrix{Int})
     o = Flux.onecold(model(x), 1:vocabsize)
     outputs = String[]
     for i in 1:size(o, 2)
@@ -81,16 +82,30 @@ function grokking_accuracy(pred, truth)
     return mean(v1 .== v2)
 end
 
-modn = 33
+modn = 97
 data, tok2idx, idx2tok = create_dataset_binop_with_mod(+, modn)
-
 # split the dataset and shuffle it
 X, Y = data
-n = Int(round(size(X, 2) * 0.5))
+# total size of all data
+N = min(1024, size(X, 2))
+trainfrac = 0.5
+n = Int(round(N * trainfrac))
 trainX, trainY = X[:, 1:n], Y[:, :, 1:n]
-valX, valY = X[:, n+1:end], Y[:, :, n+1:end]
+valX, valY = X[:, n+1:N], Y[:, :, n+1:N]
+@info """
+    $(length(data)) total examples for mod $modn
+    $(size(trainX, 2)) training examples
+    $(size(valX, 2)) validation examples
+    $(size(trainX, 1)) tokens per example
+    $(length(tok2idx)) tokens in the vocabulary
+    """
 
-traindata = Flux.DataLoader((trainX, trainY), batchsize = size(trainX, 2))
+trainX = trainX |> gpu
+trainY = trainY |> gpu
+valX = valX |> gpu
+valY = valY |> gpu
+
+traindata = Flux.DataLoader((trainX, trainY), batchsize = size(trainX, 2), shuffle = true)
 valdata = Flux.DataLoader((valX, valY), batchsize = size(valX, 2))
 
 vocabsize = size(trainY, 1)
@@ -99,20 +114,26 @@ blocksize = size(trainX, 1)
 dembed = 128
 nheads = 4
 circ = Circuit(vocabsize, blocksize, dembed; nheads);
+circ = circ |> gpu
 opt = Flux.setup(AdamW(1e-3), circ);
 
-# train_model!(circ, traindata, opt; nepochs = 10, evaliters = 1)
+# train_model!(circ, opt, traindata; nepochs = 10, evaliters = 1)
 # This gets to 100% on the train set quickly but then on the validation set highest I've got is 65% or so
 # after 150k epochs, which is quite a bit less than the 10^6 in some of the experiments. I'm not on a GPU
 # right now so the iterations take much longer.
 # Revisit this when I have access to my desktop again.
 
-# train_model!(
-#     circ,
-#     traindata,
-#     opt;
-#     nepochs = 100_000,
-#     evaliters = 1,
-#     evalevery = 1000,
-#     valdata = valdata,
-# )
+train_model!(
+    circ,
+    opt,
+    traindata;
+    nepochs = 500_000,
+    evaliters = 1,
+    evalevery = 1000,
+    valdata = valdata,
+    use_last_token_accuracy = true,
+    early_stop = () -> begin
+        # stop if the validation accuracy is >= 0.99
+        estimate_accuracy(circ, valdata; last_token = true) >= 0.99
+    end,
+)

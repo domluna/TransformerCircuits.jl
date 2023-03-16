@@ -30,34 +30,94 @@ function estimate_loss(model, data::Flux.Data.DataLoader; evaliters::Int = 100)
     return loss / evaliters
 end
 
-function estimate_accuracy(model, x, y)
+function estimate_accuracy(model, x, y; last_token::Bool = false)
     ŷ = softmax(model(x), dims = 1)
+    if last_token
+        # [:, end, :] is the last token of the sequence
+        return mean(argmax(ŷ, dims = 1)[:, end, :] .== argmax(y, dims = 1)[:, end, :])
+    end
     return mean(argmax(ŷ, dims = 1) .== argmax(y, dims = 1))
+end
+
+function estimate_accuracy(model, data::Flux.Data.DataLoader; kwargs...)
+    acc = 0.0
+    for (x, y) in data
+        acc += estimate_accuracy(model, x, y; kwargs...)
+    end
+    return acc / length(data)
+end
+
+struct Run
+    train_losses::Vector{Float64}
+    val_losses::Vector{Float64}
+    train_accs::Vector{Float64}
+    val_accs::Vector{Float64}
+end
+
+function Run()
+    Run(Float64[], Float64[], Float64[], Float64[])
+end
+
+"""
+epochs(r::Run)::Int
+
+Returns the number of epochs that have been run.
+"""
+epochs(r::Run) = length(r.train_losses)
+
+function add_train_eval!(r::Run, train_loss, train_acc)
+    push!(r.train_losses, train_loss)
+    push!(r.train_accs, train_acc)
+end
+
+function add_val_eval!(r::Run, val_loss, val_acc)
+    push!(r.val_losses, val_loss)
+    push!(r.val_accs, val_acc)
 end
 
 function train_model!(
     model,
-    traindata::Flux.Data.DataLoader,
-    optim;
+    optim,
+    traindata::Flux.Data.DataLoader;
+    valdata::Union{Flux.Data.DataLoader,Nothing} = nothing,
     nepochs::Int = 10,
-    evaliters::Int = 10,
     evalevery::Int = 1,
-    valdata::Union{Nothing,Flux.Data.DataLoader} = nothing,
+    evaliters::Int = 10,
+    use_last_token_accuracy::Bool = false,
+    run::Union{Nothing,Run} = nothing,
+    early_stop::Union{Nothing,Function} = nothing,
 )
-    for i in 1:nepochs
+    if run === nothing
+        run = Run()
+    end
+    n = epochs(run) + 1
+    for epoch in n:n+nepochs
         Flux.train!(
             (m, x, y) -> (loss = Flux.Losses.crossentropy(softmax(m(x), dims = 1), y); loss),
             model,
             traindata,
             optim,
         )
-        if i % evalevery == 0
-            @info "Training loss" iter = i estimate_loss(model, traindata; evaliters)
+        if epoch % evalevery == 0
+            train_loss = estimate_loss(model, traindata; evaliters)
+            train_acc = estimate_accuracy(model, traindata; last_token = use_last_token_accuracy)
+            add_train_eval!(run, train_loss, train_acc)
+            val_loss::Union{Float64,Nothing} = nothing
+            val_acc::Union{Float64,Nothing} = nothing
             if valdata !== nothing
-                @info "Validation loss" iter = i estimate_loss(model, valdata; evaliters)
+                val_loss = estimate_loss(model, valdata; evaliters)
+                val_acc = estimate_accuracy(model, valdata; last_token = use_last_token_accuracy)
+            end
+            add_val_eval!(run, val_loss, val_acc)
+            @info "Evaluation" epoch train_loss train_acc val_loss val_acc
+            if early_stop !== nothing
+                if early_stop(run)
+                    break
+                end
             end
         end
     end
+    return run
 end
 
 # given an initial sequence, generate a sequence of length n

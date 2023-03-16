@@ -54,7 +54,7 @@ train_data = cutoff_data(train_data, blocksize)
 val_data = cutoff_data(val_data, blocksize)
 
 X, Y = generate_batch(train_data, length(train_data) ÷ blocksize, blocksize, vocabsize)
-train_data = Flux.DataLoader((X, Y); batchsize)
+train_data = Flux.DataLoader((X, Y); batchsize, shuffle = true)
 X, Y = generate_batch(val_data, length(val_data) ÷ blocksize, blocksize, vocabsize)
 val_data = Flux.DataLoader((X, Y); batchsize)
 
@@ -116,7 +116,7 @@ Plots.heatmap(
 
 ngram_model = Circuit(vocabsize, blocksize, 32; nheads = 4);
 ngram_optim = Flux.setup(AdamW(), ngram_model);
-train_model!(ngram_model, train_data, ngram_optim; nepochs = 10)
+train_model!(ngram_model, ngram_optim, train_data; nepochs = 10)
 train_loss = estimate_loss(ngram_model, train_data, evaliters = 100)
 @info "" train_loss
 val_loss = estimate_loss(ngram_model, val_data, evaliters = 100)
@@ -124,7 +124,7 @@ val_loss = estimate_loss(ngram_model, val_data, evaliters = 100)
 
 circ = Circuit(vocabsize, blocksize, 128; nheads = 8);
 opt = Flux.setup(AdamW(5e-4), circ);
-train_model!(circ, train_data, opt; nepochs = 10)
+train_model!(circ, opt, train_data; nepochs = 10)
 train_loss = estimate_loss(circ, train_data, evaliters = 50)
 @info "Training loss" train_loss
 val_loss = estimate_loss(circ, val_data, evaliters = 50)
@@ -132,7 +132,7 @@ val_loss = estimate_loss(circ, val_data, evaliters = 50)
 # more than 1 head leads to a better loss
 #
 # 2 layers decreases the loss more.
-# julia> train_model!(circ, train_data, opt; nepochs = 10)
+# julia> train_model!(circ, opt, train_data; nepochs = 10)
 # ┌ Info: Training loss
 # └   estimate_loss(model, train_data, evaliters = 30) = 1.994046966234843
 # ┌ Info: Training loss

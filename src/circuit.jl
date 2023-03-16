@@ -22,7 +22,7 @@ function Circuit(
     )
 end
 
-function (model::Circuit)(x::Matrix{Int64}; idx = size(x, 1))
+function (model::Circuit)(x::AbstractMatrix{Int64}; idx = size(x, 1))
     tokemb = model.token_embed(x)
     posemb = model.position_embed(1:idx)
     o = tokemb .+ posemb
