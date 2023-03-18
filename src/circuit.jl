@@ -13,11 +13,16 @@ function Circuit(
     nheads::Int = 1,
     nlayers::Int = 2,
     dropout_prob::Float32 = Float32(0.1),
+    activation = gelu,
 )
     Circuit(
         Flux.Embedding(vocabsize, embedsize),
         Flux.Embedding(blocksize, embedsize),
-        Flux.Chain([Block(embedsize; nheads, dropout_prob) for _ in 1:nlayers]...),
+        Flux.Chain(
+            [
+                Block(embedsize; nheads, dropout_prob, dff_activation = activation) for _ in 1:nlayers
+            ]...,
+        ),
         Flux.Dense(embedsize, vocabsize),
     )
 end

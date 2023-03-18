@@ -19,30 +19,34 @@ function generate_batch(encoded_data::Vector{Int64}, batchsize::Int, blocksize::
     return x, Flux.onehotbatch(y, 1:vocabsize)
 end
 
-function estimate_loss(model, data::Flux.Data.DataLoader; evaliters::Int = 100)
+function estimate_loss(model, data::Flux.Data.DataLoader; evaliters::Int = 100, seq2val::Bool = false)
     loss = 0.0
     D = collect(data)
     for _ in 1:evaliters
         x, y = rand(D)
-        ŷ = softmax(model(x), dims = 1)
+        ŷ = if seq2val
+            softmax(model(x), dims = 1)[:, end, :]
+        else
+            softmax(model(x), dims = 1)
+        end
         loss += Flux.Losses.crossentropy(ŷ, y)
     end
     return loss / evaliters
 end
 
-function estimate_accuracy(model, x, y; last_token::Bool = false)
-    ŷ = softmax(model(x), dims = 1)
-    if last_token
-        # [:, end, :] is the last token of the sequence
-        return mean(argmax(ŷ, dims = 1)[:, end, :] .== argmax(y, dims = 1)[:, end, :])
+function accuracy_metric(model, x, y; seq2val::Bool = false)
+    ŷ = if seq2val
+        softmax(model(x), dims = 1)[:, end, :]
+    else
+        softmax(model(x), dims = 1)
     end
     return mean(argmax(ŷ, dims = 1) .== argmax(y, dims = 1))
 end
 
-function estimate_accuracy(model, data::Flux.Data.DataLoader; kwargs...)
+function accuracy_metric(model, data::Flux.Data.DataLoader; kwargs...)
     acc = 0.0
     for (x, y) in data
-        acc += estimate_accuracy(model, x, y; kwargs...)
+        acc += accuracy_metric(model, x, y; kwargs...)
     end
     return acc / length(data)
 end
@@ -83,30 +87,31 @@ function train_model!(
     nepochs::Int = 10,
     evalevery::Int = 1,
     evaliters::Int = 10,
-    only_last_token::Bool = false,
+    seq2val::Bool = false,
     run::Union{Nothing,Run} = nothing,
     early_stop::Union{Nothing,Function} = nothing,
 )
     if run === nothing
         run = Run()
     end
+
+    f = if seq2val
+        (m, x, y) -> Flux.Losses.crossentropy(softmax(m(x), dims = 1)[:, end, :], y)
+    else
+        (m, x, y) -> Flux.Losses.crossentropy(softmax(m(x), dims = 1), y)
+    end
     n = epochs(run) + 1
     for epoch in n:n+nepochs
-        Flux.train!(
-            (m, x, y) -> (loss = Flux.Losses.crossentropy(softmax(m(x), dims = 1), y); loss),
-            model,
-            traindata,
-            optim,
-        )
+        Flux.train!(f, model, traindata, optim)
         if epoch % evalevery == 0
-            train_loss = estimate_loss(model, traindata; evaliters)
-            train_acc = estimate_accuracy(model, traindata; last_token = only_last_token)
+            train_loss = estimate_loss(model, traindata; evaliters, seq2val)
+            train_acc = accuracy_metric(model, traindata; seq2val)
             add_train_eval!(run, train_loss, train_acc)
             val_loss::Union{Float64,Nothing} = nothing
             val_acc::Union{Float64,Nothing} = nothing
             if valdata !== nothing
-                val_loss = estimate_loss(model, valdata; evaliters)
-                val_acc = estimate_accuracy(model, valdata; last_token = only_last_token)
+                val_loss = estimate_loss(model, valdata; evaliters, seq2val)
+                val_acc = accuracy_metric(model, valdata; seq2val)
             end
             add_val_eval!(run, val_loss, val_acc)
             @info "Evaluation" epoch train_loss train_acc val_loss val_acc

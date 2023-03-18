@@ -36,13 +36,27 @@
 # That's 10^4 which is an order of magnitude less than the 10^5 steps in the paper before they see any movement in validation accuracy going up.
 # And there's movement before 100 epochs are done.
 #
+# UPDATE: It turns out there was an error dividing by 0 when the dataset was created so the experiments were on the plus dataset not
+# the division dataset. It seems the division dataset hits 90% validation accuracy very quickly and then stays there for a long time.
+# I wonder if it's because there are symbol(s) that are never used in the validation set. -- No, that's not the case. We generate data a<-1..modn-1, b<-1...mod-n1. If this is not shuffled, i.e. we split in order, validation accuracy is significantly worse. 30-40% vs 90-95%. Interestingly the validation loss curve goes up.
+#
+# We're still doing seq2seq loss right now but this problem is more akin to predicting the final output given the prior sequence. The entire sequence loss doesn't make sense frankly since for a<op>b a<op> gives no insight into what b will be.
+#
+#
 # Note 6:
 # x^3 + xy^2 + y mod 97
 # 50/50 split after 100k epochs gives 2% validation accuracy
-# 95/5 split after 100k epochs gives 2% validation accuracy
+# 95/5 split after 100k epochs gives 5% validation accuracy
+# So this is the same as the paper. Note sure if they mention the accuracy but they mention it doesn't generalize to this problem.
+#
+# Note 7:
+# seq2val is working super well. We're now getting the results we expect. The validation accuracy increases after a certain point, where the validation starts to decrease. Prior to this point the validation loss would steadily increase.
 using TransformerCircuits
 using Flux
 using Random
+using Serialization
+using Plots
+using BSON
 
 include("utils.jl")
 
@@ -63,20 +77,26 @@ include("utils.jl")
 # or 10^6 steps which would fall in the 2.5-5B token range.
 #
 alphabet = string.(vcat('a':'z', 'A':'Z', Char.(1024:2048)))
-num2tok = Dict(i - 1 => c for (i, c) in enumerate(alphabet))
-tok2num = Dict(values(num2tok) .=> keys(num2tok))
 
-function create_dataset_binop_with_mod(op::Function, modn::Int)
-    toks = alphabet[1:modn+1]
+# number ranges are 1:modn-1 and -1:-modn-1
+function create_dataset_binop_with_mod(f::Function, modn::Int)
+    nums = collect(vcat(1:modn, [0], -modn:-1))
+    num2tok = Dict{Int,String}()
+    for (i, n) in enumerate(nums)
+        num2tok[n] = alphabet[i]
+    end
+
+    tok2num = Dict(values(num2tok) .=> keys(num2tok))
+    toks = collect(values(num2tok))
     push!(toks, "=")
     push!(toks, "∘")
     tok2idx = Dict(c => i for (i, c) in enumerate(toks))
     idx2tok = Dict(i => c for (i, c) in enumerate(toks))
 
     data = Vector{Int}[]
-    for a in 0:modn
-        for b in 0:modn
-            c = (op(a, b)) % modn
+    for a in 1:modn
+        for b in 1:modn
+            c = f(a, b)
             # the operation is hidden from the model
             # all that's is the inputs and output
             s = "$(num2tok[a])∘$(num2tok[b])=$(num2tok[c])"
@@ -88,12 +108,12 @@ function create_dataset_binop_with_mod(op::Function, modn::Int)
     Random.shuffle!(data)
 
     X = zeros(Int, (length(data[1]) - 1, length(data)))
-    Y = zeros(Int, (length(data[1]) - 1, length(data)))
+    y = zeros(Int, length(data))
     for (i, enc) in enumerate(data)
         X[:, i] = enc[1:end-1]
-        Y[:, i] = enc[2:end]
+        y[i] = enc[end]
     end
-    return (X, Flux.onehotbatch(Y, 1:length(tok2idx))), tok2idx, idx2tok
+    return (X, Flux.onehotbatch(y, 1:length(tok2idx))), tok2idx, idx2tok
 end
 
 function decode(x::Vector{Int})
@@ -118,45 +138,44 @@ function decode(model, x::AbstractMatrix{Int})
     return outputs
 end
 
-function grokking_accuracy(pred, truth)
-    v1 = Flux.onecold(pred, 1:vocabsize)[end, :]
-    v2 = Flux.onecold(truth, 1:vocabsize)[end, :]
-    return mean(v1 .== v2)
-end
-
 modn = 97
-# data, tok2idx, idx2tok = create_dataset_binop_with_mod(+, modn)
+# +
+data, tok2idx, idx2tok = create_dataset_binop_with_mod((a, b) -> (a + b) % modn, modn)
+# -
+# data, tok2idx, idx2tok = create_dataset_binop_with_mod((a,b) -> (a - b) % modn, modn)
 
-# data, tok2idx, idx2tok = create_dataset_binop_with_mod(÷, modn)
+# division
+data, tok2idx, idx2tok =
+    create_dataset_binop_with_mod((a, b) -> isodd(b) ? (a ÷ b) % modn : (a - b) % modn, modn)
 
 # the paper says x^3 + xy^2 + y mod 97 did not lead to generalization even with a 95/5 split
-data, tok2idx, idx2tok = create_dataset_binop_with_mod((x, y) -> x^3 + x * y^2 + y, modn)
+# data, tok2idx, idx2tok = create_dataset_binop_with_mod((x, y) -> x^3 + x * y^2 + y, modn)
 
-X, Y = data
-trainfrac = 0.95
-N = size(X, 2)
-n = Int(round(N * trainfrac))
-trainX, trainY = X[:, 1:n], Y[:, :, 1:n]
-valX, valY = X[:, n+1:N], Y[:, :, n+1:N]
+X, Y = data;
+trainfrac = 0.5;
+N = size(X, 2);
+n = Int(round(N * trainfrac));
+trainX, trainY = X[:, 1:n], Y[:, 1:n];
+valX, valY = X[:, n+1:N], Y[:, n+1:N];
 
-trainX = trainX |> gpu
-trainY = trainY |> gpu
-valX = valX |> gpu
-valY = valY |> gpu
+trainX = trainX |> gpu;
+trainY = trainY |> gpu;
+valX = valX |> gpu;
+valY = valY |> gpu;
 
 train_batchsize = min(512, size(trainX, 2))
 val_batchsize = min(512, size(valX, 2))
-traindata = Flux.DataLoader((trainX, trainY), batchsize = train_batchsize, shuffle = true)
-valdata = Flux.DataLoader((valX, valY), batchsize = val_batchsize)
+traindata = Flux.DataLoader((trainX, trainY), batchsize = train_batchsize, shuffle = true);
+valdata = Flux.DataLoader((valX, valY), batchsize = val_batchsize);
 
 vocabsize = size(trainY, 1)
 blocksize = size(trainX, 1)
 # paper used 128 for embedding size and 4 heads
 dembed = 128
 nheads = 4
-circ = Circuit(vocabsize, blocksize, dembed; nheads);
-circ = circ |> gpu
-opt = Flux.setup(AdamW(1e-3), circ);
+nlayers = 2
+circ = Circuit(vocabsize, blocksize, dembed; nheads, nlayers) |> gpu;
+opt = Flux.setup(AdamW(3e-4), circ);
 
 @info """
 $(N) total examples for mod $modn
@@ -167,18 +186,54 @@ $(length(tok2idx)) tokens in the vocabulary
 """
 
 run = Run()
+evalevery = 10
 train_model!(
     circ,
     opt,
     traindata;
-    nepochs = 100_000,
+    nepochs = 10_000,
     evaliters = 10,
-    evalevery = 100,
+    evalevery = evalevery,
     valdata = valdata,
-    only_last_token = true,
+    seq2val = true,
     early_stop = () -> begin
         # stop if the validation accuracy is >= 0.99
-        estimate_accuracy(circ, valdata; last_token = true) >= 0.99
+        accuracy_metric(circ, valdata; seq2val = true) >= 0.99
     end,
     run = run,
 )
+
+name = "unsymmetric_odd_div_even_sub_97"
+serialize("runs/$(name)_run.jls", run)
+
+nsteps = length(run.train_losses) * evalevery * length(traindata)
+xsteps = 1:(nsteps÷length(run.train_losses)):nsteps
+# set the ticks for every 100 if there are 1000 or less steps, otherwise every 1000
+
+plot(xsteps, run.train_accs, label = "Training accuracy", linewidth = 2)
+plot!(xsteps, run.val_accs, label = "Validation accuracy", linewidth = 2)
+ylims!((0.0, 1.1))
+# xlims!((0, xsteps[end]))
+
+# add titles and labels
+title!("Training and validation accuracy")
+xlabel!("Optimization Steps")
+ylabel!("Accuracy")
+# show the plot
+display(plot!)
+
+savefig("images/$(name)_accuracy.png")
+
+# create a new plot for the losses
+plot(xsteps, run.train_losses, label = "Train loss")
+plot!(xsteps, run.val_losses, label = "Val loss")
+
+# add title and axis labels for the loss plot
+title!("Training and validation loss")
+xlabel!("Optimization Steps")
+ylabel!("Loss")
+
+# save the loss plot
+savefig("images/$(name)_loss.png")
+
+BSON.@save "models/circ$(nlayers)-$(nheads)-$(dembed)_$(name)_model.bson" circ
