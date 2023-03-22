@@ -51,6 +51,16 @@
 #
 # Note 7:
 # seq2val is working super well. We're now getting the results we expect. The validation accuracy increases after a certain point, where the validation starts to decrease. Prior to this point the validation loss would steadily increase.
+#
+# Note 8:
+#
+# (x, y) -> isodd(y) ? (x ÷ y) % modn : (x - y) % modn
+#
+# This is the same as the paper. The model can generalize to this problem as well even though it's asymmetrical, however, it does take significantly longer.
+#
+# Note 9:
+#
+# It could be due to a particular seed but the validation accuracy does not necessarily stay at 0% and then start going up, it might start anywhere from 0-40% and then plateau for a long while before going up.
 using TransformerCircuits
 using Flux
 using Random
