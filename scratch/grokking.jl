@@ -152,17 +152,17 @@ modn = 97
 # +
 # data, tok2idx, idx2tok = create_dataset_binop_with_mod((a, b) -> (a + b) % modn, modn)
 # -
-data, tok2idx, idx2tok = create_dataset_binop_with_mod((a, b) -> (a - b) % modn, modn)
+# data, tok2idx, idx2tok = create_dataset_binop_with_mod((a, b) -> (a - b) % modn, modn)
 
 # division
-# data, tok2idx, idx2tok =
-#     create_dataset_binop_with_mod((a, b) -> isodd(b) ? (a ÷ b) % modn : (a - b) % modn, modn)
+data, tok2idx, idx2tok =
+    create_dataset_binop_with_mod((a, b) -> isodd(b) ? (a ÷ b) % modn : (a - b) % modn, modn)
 
 # the paper says x^3 + xy^2 + y mod 97 did not lead to generalization even with a 95/5 split
-data, tok2idx, idx2tok = create_dataset_binop_with_mod((a, b) -> (a^3 + a * b^2 + b) % modn, modn)
+# data, tok2idx, idx2tok = create_dataset_binop_with_mod((a, b) -> (a^3 + a * b^2 + b) % modn, modn)
 
 X, Y = data;
-trainfrac = 0.95;
+trainfrac = 0.5;
 N = size(X, 2);
 n = Int(round(N * trainfrac));
 trainX, trainY = X[:, 1:n], Y[:, 1:n];
