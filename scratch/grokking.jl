@@ -90,7 +90,7 @@ alphabet = string.(vcat('a':'z', 'A':'Z', Char.(1024:2048)))
 
 # number ranges are 1:modn-1 and -1:-modn-1
 function create_dataset_binop_with_mod(f::Function, modn::Int)
-    nums = collect(vcat(1:modn, [0], -modn:-1))
+    nums = collect(-modn:modn)
     num2tok = Dict{Int,String}()
     for (i, n) in enumerate(nums)
         num2tok[n] = alphabet[i]
@@ -150,19 +150,19 @@ end
 
 modn = 97
 # +
-data, tok2idx, idx2tok = create_dataset_binop_with_mod((a, b) -> (a + b) % modn, modn)
+# data, tok2idx, idx2tok = create_dataset_binop_with_mod((a, b) -> (a + b) % modn, modn)
 # -
-# data, tok2idx, idx2tok = create_dataset_binop_with_mod((a,b) -> (a - b) % modn, modn)
+data, tok2idx, idx2tok = create_dataset_binop_with_mod((a, b) -> (a - b) % modn, modn)
 
 # division
-data, tok2idx, idx2tok =
-    create_dataset_binop_with_mod((a, b) -> isodd(b) ? (a ÷ b) % modn : (a - b) % modn, modn)
+# data, tok2idx, idx2tok =
+#     create_dataset_binop_with_mod((a, b) -> isodd(b) ? (a ÷ b) % modn : (a - b) % modn, modn)
 
 # the paper says x^3 + xy^2 + y mod 97 did not lead to generalization even with a 95/5 split
-# data, tok2idx, idx2tok = create_dataset_binop_with_mod((x, y) -> x^3 + x * y^2 + y, modn)
+data, tok2idx, idx2tok = create_dataset_binop_with_mod((a, b) -> (a^3 + a * b^2 + b) % modn, modn)
 
 X, Y = data;
-trainfrac = 0.5;
+trainfrac = 0.95;
 N = size(X, 2);
 n = Int(round(N * trainfrac));
 trainX, trainY = X[:, 1:n], Y[:, 1:n];
@@ -213,7 +213,7 @@ train_model!(
     run = run,
 )
 
-name = "unsymmetric_odd_div_even_sub_97"
+name = "hardfunction_97"
 serialize("runs/$(name)_run.jls", run)
 
 nsteps = length(run.train_losses) * evalevery * length(traindata)

@@ -92,6 +92,7 @@ function train_model!(
     early_stop::Union{Nothing,Function} = nothing,
 )
     if run === nothing
+        @info "creating new run"
         run = Run()
     end
 
